@@ -63,7 +63,7 @@
       console.warn('Firebase init failed', e);
     }
 
-    // ---------- UI icons ----------
+    // ---------- ICONS ----------
     const Icon = ({ children, className = "w-5 h-5", ...props }) => (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={className} {...props}>
         {children}
@@ -86,7 +86,7 @@
     const LOCAL_STORAGE_CART_KEY = 'afri_cart_v1';
     const OFFICIAL_WHATSAPP = '2348140813999';
     const NAIRA = '₦';
-    const ADMIN_PLAIN_PASSCODE = '#112AfriNethubnodeyplay112#'; // your chosen passcode
+    const ADMIN_PLAIN_PASSCODE = '#112AfriNethubnodeyplay112#'; // plain passcode per request
 
     const formatMoney = (amount) => NAIRA + Number(amount || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
 
@@ -159,12 +159,13 @@
       );
     }
 
-    // ---------- App (with long-press admin behavior) ----------
+    // ---------- App (with isAdminAllowed & isAdminActive) ----------
     function App() {
-      // admin + UI
-      const [isAdmin, setIsAdmin] = useState(() => {
+      // Persisted "allowed" flag (device remembered) and session "active" flag (controls UI)
+      const [isAdminAllowed, setIsAdminAllowed] = useState(() => {
         try { return localStorage.getItem('afri_is_admin') === '1'; } catch { return false; }
       });
+      const [isAdminActive, setIsAdminActive] = useState(false); // session-level activation
       const [showLogin, setShowLogin] = useState(false);
       const [loginCode, setLoginCode] = useState('');
       const [activeCategory, setActiveCategory] = useState('All');
@@ -175,7 +176,7 @@
       const fileInputRef = useRef(null);
 
       // products & cart
-      const [products, setProducts] = useState([]); // will load from Firestore or fallback
+      const [products, setProducts] = useState([]);
       const [cart, setCart] = useLocalStorageState(LOCAL_STORAGE_CART_KEY, []);
       const [showCart, setShowCart] = useState(false);
 
@@ -274,6 +275,7 @@
 
       // ---------- long-press handlers ----------
       function startLongPress(e) {
+        // Prevent default to avoid context menu on long touch
         if (e && e.preventDefault) e.preventDefault();
         if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
         longPressTimerRef.current = setTimeout(() => {
@@ -290,34 +292,40 @@
       }
 
       function handleLongPress() {
-        if (isAdmin) {
-          // admin already: open upload modal to manage catalog
+        // If session already active, open admin panel directly
+        if (isAdminActive) {
           setShowUploadModal(true);
         } else {
-          // not admin: open access-code modal
+          // require access code (even if device is allowed previously)
           setShowLogin(true);
         }
       }
 
-      // ---------- Access code login (plain) ----------
+      // ---------- Access code login ----------
       const handleAccessCodeLogin = () => {
         if (!loginCode || loginCode.trim() === '') { alert('Enter access code'); return; }
         if (loginCode.trim() === ADMIN_PLAIN_PASSCODE) {
           try { localStorage.setItem('afri_is_admin','1'); } catch {}
-          setIsAdmin(true);
+          setIsAdminAllowed(true);   // remember device is allowed
+          setIsAdminActive(true);    // activate this session so UI appears
           setShowLogin(false);
           setLoginCode('');
+          // optionally open upload immediately:
+          setShowUploadModal(true);
         } else {
           alert('Wrong access code.');
         }
       };
 
+      // Sign out should deactivate session only (keeps allowed flag so device remains recognized).
       const handleSignOut = () => {
-        try { localStorage.removeItem('afri_is_admin'); } catch {}
-        setIsAdmin(false);
+        setIsAdminActive(false);
+        // optionally: to remove remembered device uncomment the two lines below:
+        // try { localStorage.removeItem('afri_is_admin'); } catch {}
+        // setIsAdminAllowed(false);
       };
 
-      // ---------- Image upload (previews + newFiles) ----------
+      // ---------- Image upload ----------
       const handleImageUpload = (e) => {
         const files = Array.from(e.target.files || []);
         if (files.length + formData.images.length > 8) { alert('Maximum 8 images allowed'); return; }
@@ -340,11 +348,11 @@
         });
       };
 
-      // ---------- Save product (uploads to Storage + writes Firestore) ----------
+      // ---------- Save product (requires isAdminActive) ----------
       const handleSaveProduct = async (e) => {
         if (e && e.preventDefault) e.preventDefault();
         if (!formData.images || formData.images.length === 0) { alert('Please upload at least one image'); return; }
-        if (!isAdmin) { alert('Only admins can save products. Unlock with the access code.'); return; }
+        if (!isAdminActive) { alert('Only active admin sessions can save products. Long-press the admin icon and enter the access code.'); return; }
 
         setIsSaving(true);
         try {
@@ -404,9 +412,9 @@
         }
       };
 
-      // ---------- Delete product ----------
+      // ---------- Delete product (requires isAdminActive) ----------
       const handleDeleteProduct = async (id) => {
-        if (!isAdmin) { alert('Only admins can delete'); return; }
+        if (!isAdminActive) { alert('Only active admin sessions can delete products. Long-press admin icon and enter the access code.'); return; }
         if (!confirm('Delete this item?')) return;
 
         try {
@@ -455,7 +463,7 @@
           <nav className="fixed w-full z-50 bg-slate-900/80 backdrop-blur border-b border-slate-800">
             <div className="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                {/* ADMIN BUTTON: press-and-hold (long-press) to open admin features */}
+                {/* Cart logo is visible to visitors — long-press to open admin access */}
                 <button
                   onPointerDown={startLongPress}
                   onPointerUp={cancelLongPress}
@@ -464,7 +472,7 @@
                   onTouchStart={startLongPress}
                   onTouchEnd={cancelLongPress}
                   onContextMenu={(e)=>e.preventDefault()}
-                  className={`p-2 rounded-lg ${isAdmin ? 'bg-red-500' : 'bg-amber-400 text-slate-900'}`}
+                  className={`p-2 rounded-lg ${isAdminActive ? 'bg-red-500' : 'bg-amber-400 text-slate-900'}`}
                   aria-label="Admin (press & hold to open access)"
                   title="Press and hold to open admin access"
                 >
@@ -474,8 +482,8 @@
                 <div>
                   <div className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-amber-300 to-amber-100">AFRINETHUB</div>
                   <div className="flex items-center gap-2">
-                    {isAdmin && <div className="text-xs text-red-400">ADMIN ACTIVE</div>}
-                    {isAdmin && (
+                    {isAdminActive && <div className="text-xs text-red-400">ADMIN ACTIVE</div>}
+                    {isAdminActive && (
                       <button onClick={handleSignOut} className="text-xs text-slate-400 hover:text-white">Sign out</button>
                     )}
                   </div>
@@ -487,7 +495,7 @@
                   <button key={cat} onClick={()=>setActiveCategory(cat)} className={`text-sm px-3 py-1 rounded ${activeCategory===cat?'bg-amber-500 text-slate-900':'text-slate-400 hover:text-white'}`}>{cat}</button>
                 ))}
 
-                {isAdmin && <button onClick={()=>setShowUploadModal(true)} className="bg-green-600 px-3 py-2 rounded text-white flex items-center gap-2"><Plus/> New</button>}
+                {isAdminActive && <button onClick={()=>setShowUploadModal(true)} className="bg-green-600 px-3 py-2 rounded text-white flex items-center gap-2"><Plus/> New</button>}
 
                 <button onClick={()=>setShowCart(true)} className="relative p-2 bg-slate-800 rounded">
                   <ShoppingCart />
@@ -507,7 +515,7 @@
               <div className="rounded-2xl p-8 md:p-16 bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700">
                 <h1 className="text-3xl md:text-5xl font-bold">Direct Sales from <span className="text-amber-400">AfriNethub</span> Global</h1>
                 <p className="text-slate-400 mt-4">Premium Autos & latest tech. Quality you can trust.</p>
-                {isAdmin && <button onClick={()=>setShowUploadModal(true)} className="mt-6 bg-amber-400 text-slate-900 px-4 py-2 rounded">Quick Upload Item</button>}
+                {isAdminActive && <button onClick={()=>setShowUploadModal(true)} className="mt-6 bg-amber-400 text-slate-900 px-4 py-2 rounded">Quick Upload Item</button>}
               </div>
             </div>
           </header>
@@ -532,7 +540,7 @@
           <main className="py-12 px-4 max-w-7xl mx-auto">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
               {filteredProducts.map(product => (
-                <ProductCard key={product.id} product={product} isAdmin={isAdmin} onAddToCart={addToCart} onEdit={startEdit} onDelete={handleDeleteProduct} />
+                <ProductCard key={product.id} product={product} isAdmin={isAdminActive} onAddToCart={addToCart} onEdit={startEdit} onDelete={handleDeleteProduct} />
               ))}
             </div>
           </main>
@@ -575,7 +583,7 @@
             </div>
           )}
 
-          {/* ADMIN LOGIN modal */}
+          {/* ADMIN LOGIN modal (shown after long-press) */}
           {showLogin && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setShowLogin(false)}>
               <div className="bg-slate-900 p-6 rounded-2xl border border-slate-700 w-full max-w-md" onClick={(e)=>e.stopPropagation()}>
@@ -586,6 +594,7 @@
                   <button onClick={()=>setShowLogin(false)} className="flex-1 text-slate-400">Cancel</button>
                   <button onClick={handleAccessCodeLogin} className="flex-1 bg-amber-400 text-slate-900 rounded">Unlock</button>
                 </div>
+                <p className="text-xs text-slate-500 mt-3">Press-and-hold the cart icon to open this access dialog.</p>
               </div>
             </div>
           )}
@@ -683,12 +692,14 @@
 
   <!--
     Notes:
-    - Admin UI now opens only on a press-and-hold (long-press) of the top-left admin button (~700ms).
-      - Long-press when not admin -> shows access-code modal (enter your code).
-      - Long-press when already admin -> opens upload modal.
-    - A small "Sign out" button is visible next to ADMIN ACTIVE to allow signing out without long-pressing.
-    - Firestore+Storage integration remains: if configured the app saves products to Firestore and images to Storage; otherwise it falls back to localStorage.
-    - If you want the access-code hidden, I can swap to the hashed flow (compute and embed SHA-256 hash) next.
+    - Behavior now:
+      - Cart icon is always shown to visitors.
+      - Admin features are only visible when the session flag isAdminActive === true.
+      - To activate admin session: press-and-hold the cart icon (~700ms) -> Access Code modal opens -> enter code -> session becomes active and the Upload modal opens.
+      - isAdminAllowed (stored in localStorage) merely remembers the device is permitted; it no longer auto-opens admin UI on page load. You must long-press + enter the code to activate a session.
+    - Admin actions (save/delete) now check isAdminActive (session) — persistent localStorage alone is not sufficient to perform writes.
+    - If you'd like "forget this device" behavior, we can add a button that clears localStorage key 'afri_is_admin'.
+    - If you want the access code hidden, we can switch to hashed access-code (recommended) next.
   -->
 </body>
 </html>
