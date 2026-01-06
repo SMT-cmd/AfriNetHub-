@@ -159,7 +159,7 @@
       );
     }
 
-    // ---------- App ----------
+    // ---------- App (with long-press admin behavior) ----------
     function App() {
       // admin + UI
       const [isAdmin, setIsAdmin] = useState(() => {
@@ -175,7 +175,7 @@
       const fileInputRef = useRef(null);
 
       // products & cart
-      const [products, setProducts] = useState([]); // we'll load from Firestore or fallback to demo defaults
+      const [products, setProducts] = useState([]); // will load from Firestore or fallback
       const [cart, setCart] = useLocalStorageState(LOCAL_STORAGE_CART_KEY, []);
       const [showCart, setShowCart] = useState(false);
 
@@ -183,31 +183,17 @@
       const [formData, setFormData] = useState({ name:'', category:'Phones', brand:'', price:'', oldPrice:'', images:[], newFiles:[], description:'' });
       const [isSaving, setIsSaving] = useState(false);
 
-      // default local products (fallback)
+      // long-press refs/settings
+      const longPressTimerRef = useRef(null);
+      const longPressDuration = 700; // ms to trigger long-press
+
+      // local defaults (used if Firestore not available)
       const localDefaults = [
-        {
-          id: 1,
-          name: 'Toyota Camry 2022 XLE',
-          category: 'Cars',
-          brand: 'Toyota',
-          price: 28500000,
-          oldPrice: 30000000,
-          images: ['https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?w=1200&q=60'],
-          description: 'Foreign Used, Full Option'
-        },
-        {
-          id: 2,
-          name: 'iPhone 16 Pro Max',
-          category: 'Phones',
-          brand: 'Apple',
-          price: 2150000,
-          oldPrice: 2300000,
-          images: ['https://images.unsplash.com/photo-1727116195101-72f85bc67858?w=1200&q=60'],
-          description: '256GB, Desert Titanium'
-        }
+        { id: 1, name: 'Toyota Camry 2022 XLE', category: 'Cars', brand: 'Toyota', price: 28500000, oldPrice: 30000000, images: ['https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?w=1200&q=60'], description: 'Foreign Used, Full Option' },
+        { id: 2, name: 'iPhone 16 Pro Max', category: 'Phones', brand: 'Apple', price: 2150000, oldPrice: 2300000, images: ['https://images.unsplash.com/photo-1727116195101-72f85bc67858?w=1200&q=60'], description: '256GB, Desert Titanium' }
       ];
 
-      // Load products: prefer Firestore if available, else local defaults
+      // Load products: prefer Firestore realtime, fallback to local
       useEffect(() => {
         if (db) {
           const unsub = db.collection('products').orderBy('createdAt','desc').onSnapshot(snap => {
@@ -220,7 +206,6 @@
           });
           return () => unsub();
         } else {
-          // fallback
           const persisted = localStorage.getItem('afri_products_v3');
           if (persisted) {
             try { setProducts(JSON.parse(persisted)); } catch { setProducts(localDefaults); }
@@ -228,14 +213,14 @@
         }
       }, []);
 
-      // persist local products when Firestore not available and products change
+      // persist local products when Firestore not used
       useEffect(() => {
         if (!db) {
           try { localStorage.setItem('afri_products_v3', JSON.stringify(products)); } catch {}
         }
       }, [products]);
 
-      // editing -> populate formData
+      // editing -> populate form
       useEffect(() => {
         if (editingProduct) {
           setFormData({
@@ -251,6 +236,11 @@
         }
       }, [editingProduct]);
 
+      // cleanup long-press timer on unmount
+      useEffect(() => {
+        return () => { if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current); };
+      }, []);
+
       // CART helpers
       const calculateTotal = () => cart.reduce((sum, item) => sum + (Number(item.price) || 0) * (item.qty || 1), 0);
 
@@ -265,12 +255,10 @@
         setShowCart(true);
       };
 
-      const changeQty = (id, newQty) => {
-        setCart(prev => {
-          if (newQty <= 0) return prev.filter(p => p.id !== id);
-          return prev.map(p => p.id === id ? { ...p, qty: newQty } : p);
-        });
-      };
+      const changeQty = (id, newQty) => setCart(prev => {
+        if (newQty <= 0) return prev.filter(p => p.id !== id);
+        return prev.map(p => p.id === id ? { ...p, qty: newQty } : p);
+      });
 
       const removeFromCart = (id) => setCart(prev => prev.filter(p => p.id !== id));
 
@@ -283,6 +271,33 @@
         message += `💝 *TOTAL AMOUNT: ${total}*\n\nPlease confirm availability for these items.`;
         window.open(`https://wa.me/${OFFICIAL_WHATSAPP}?text=${encodeURIComponent(message)}`, '_blank');
       };
+
+      // ---------- long-press handlers ----------
+      function startLongPress(e) {
+        if (e && e.preventDefault) e.preventDefault();
+        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = setTimeout(() => {
+          longPressTimerRef.current = null;
+          handleLongPress();
+        }, longPressDuration);
+      }
+
+      function cancelLongPress() {
+        if (longPressTimerRef.current) {
+          clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = null;
+        }
+      }
+
+      function handleLongPress() {
+        if (isAdmin) {
+          // admin already: open upload modal to manage catalog
+          setShowUploadModal(true);
+        } else {
+          // not admin: open access-code modal
+          setShowLogin(true);
+        }
+      }
 
       // ---------- Access code login (plain) ----------
       const handleAccessCodeLogin = () => {
@@ -328,20 +343,16 @@
       // ---------- Save product (uploads to Storage + writes Firestore) ----------
       const handleSaveProduct = async (e) => {
         if (e && e.preventDefault) e.preventDefault();
-
         if (!formData.images || formData.images.length === 0) { alert('Please upload at least one image'); return; }
         if (!isAdmin) { alert('Only admins can save products. Unlock with the access code.'); return; }
 
         setIsSaving(true);
         try {
-          // If Firebase is configured, use it. Otherwise fall back to local update.
           if (db && storage) {
-            // docRef (create id first)
             let docRef;
             if (editingProduct && editingProduct.id) docRef = db.collection('products').doc(String(editingProduct.id));
             else docRef = db.collection('products').doc();
 
-            // upload newFiles (if any)
             const uploaded = [];
             for (let i = 0; i < (formData.newFiles || []).length; i++) {
               const file = formData.newFiles[i];
@@ -352,10 +363,9 @@
               uploaded.push({ path, url });
             }
 
-            // existingRemote (already have url or object)
             const existingRemote = (formData.images || []).filter(i => {
-              if (typeof i === 'string') return i.startsWith('http'); // remote url
-              return i && i.url; // object {path, url}
+              if (typeof i === 'string') return i.startsWith('http');
+              return i && i.url;
             }).map(i => (typeof i === 'string' ? { path: null, url: i } : { path: i.path || null, url: i.url }));
 
             const finalImages = [...existingRemote, ...uploaded];
@@ -373,26 +383,17 @@
             if (!editingProduct) payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
 
             await docRef.set(payload, { merge: true });
-
             alert('Product saved to catalog.');
           } else {
-            // fallback: local only
-            const normalized = {
-              ...formData,
-              id: editingProduct ? editingProduct.id : Date.now(),
-              price: Number(formData.price),
-              oldPrice: formData.oldPrice ? Number(formData.oldPrice) : 0
-            };
+            const normalized = { ...formData, id: editingProduct ? editingProduct.id : Date.now(), price: Number(formData.price), oldPrice: formData.oldPrice ? Number(formData.oldPrice) : 0 };
             if (editingProduct) setProducts(prev => prev.map(p => p.id === editingProduct.id ? normalized : p));
             else setProducts(prev => [normalized, ...prev]);
             alert('Product saved locally (Firestore not configured).');
           }
 
-          // reset form
           setShowUploadModal(false);
           setEditingProduct(null);
           setFormData({ name:'', category:'Phones', brand:'', price:'', oldPrice:'', images:[], newFiles:[], description:'' });
-
         } catch (err) {
           console.error('Save product error', err);
           let msg = err && err.message ? err.message : String(err);
@@ -403,7 +404,7 @@
         }
       };
 
-      // ---------- Delete product (delete storage objects if path present) ----------
+      // ---------- Delete product ----------
       const handleDeleteProduct = async (id) => {
         if (!isAdmin) { alert('Only admins can delete'); return; }
         if (!confirm('Delete this item?')) return;
@@ -425,7 +426,6 @@
             }
             await db.collection('products').doc(String(id)).delete();
           } else {
-            // local fallback
             setProducts(prev => prev.filter(p => p.id !== id));
           }
           setCart(prev => prev.filter(c => c.id !== id));
@@ -455,12 +455,30 @@
           <nav className="fixed w-full z-50 bg-slate-900/80 backdrop-blur border-b border-slate-800">
             <div className="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <button onClick={() => (isAdmin ? handleSignOut() : setShowLogin(true))} className={`p-2 rounded-lg ${isAdmin ? 'bg-red-500' : 'bg-amber-400 text-slate-900'}`} aria-label="Admin">
+                {/* ADMIN BUTTON: press-and-hold (long-press) to open admin features */}
+                <button
+                  onPointerDown={startLongPress}
+                  onPointerUp={cancelLongPress}
+                  onPointerCancel={cancelLongPress}
+                  onPointerLeave={cancelLongPress}
+                  onTouchStart={startLongPress}
+                  onTouchEnd={cancelLongPress}
+                  onContextMenu={(e)=>e.preventDefault()}
+                  className={`p-2 rounded-lg ${isAdmin ? 'bg-red-500' : 'bg-amber-400 text-slate-900'}`}
+                  aria-label="Admin (press & hold to open access)"
+                  title="Press and hold to open admin access"
+                >
                   <ShoppingCart className="w-5 h-5" />
                 </button>
+
                 <div>
                   <div className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-amber-300 to-amber-100">AFRINETHUB</div>
-                  {isAdmin && <div className="text-xs text-red-400">ADMIN ACTIVE</div>}
+                  <div className="flex items-center gap-2">
+                    {isAdmin && <div className="text-xs text-red-400">ADMIN ACTIVE</div>}
+                    {isAdmin && (
+                      <button onClick={handleSignOut} className="text-xs text-slate-400 hover:text-white">Sign out</button>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -559,8 +577,8 @@
 
           {/* ADMIN LOGIN modal */}
           {showLogin && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-              <div className="bg-slate-900 p-6 rounded-2xl border border-slate-700 w-full max-w-md">
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setShowLogin(false)}>
+              <div className="bg-slate-900 p-6 rounded-2xl border border-slate-700 w-full max-w-md" onClick={(e)=>e.stopPropagation()}>
                 <div className="flex justify-center mb-4"><Lock className="w-8 h-8 text-amber-400" /></div>
                 <h3 className="text-xl font-bold text-center mb-4">Admin Access</h3>
                 <input type="password" value={loginCode} onChange={e=>setLoginCode(e.target.value)} onKeyDown={e=>e.key==='Enter' && handleAccessCodeLogin()} placeholder="Enter access code" className="w-full bg-slate-800 p-3 rounded mb-4" />
@@ -575,10 +593,13 @@
           {/* UPLOAD / EDIT modal */}
           {showUploadModal && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 overflow-auto">
-              <div className="bg-slate-900 p-6 rounded-2xl w-full max-w-2xl border border-slate-700">
+              <div className="bg-slate-900 p-6 rounded-2xl w-full max-w-2xl border border-slate-700" onClick={(e)=>e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-xl font-bold">{editingProduct ? 'Edit Product' : 'Upload New Product'}</h3>
-                  <button onClick={closeModal} aria-label="Close"><X /></button>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => { setShowUploadModal(false); setEditingProduct(null); }} aria-label="Close"><X /></button>
+                    <button onClick={handleSignOut} className="text-xs text-slate-400">Sign out</button>
+                  </div>
                 </div>
 
                 <form onSubmit={handleSaveProduct} className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -608,7 +629,7 @@
                   <div>
                     <label className="text-xs text-slate-400 uppercase block mb-1">Category</label>
                     <select value={formData.category} onChange={e=>setFormData({...formData,category:e.target.value})} className="w-full bg-slate-800 p-3 rounded">
-                      {categories.filter(c=>c!=='All').map(c=><option key={c} value={c}>{c}</option>)}
+                      {['Cars','Phones','Laptops','Tablets','Watches'].map(c=><option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
 
@@ -661,47 +682,13 @@
   </script>
 
   <!--
-    IMPORTANT NOTES & NEXT STEPS
-
-    1) Enable Firebase services:
-       - Go to Firebase Console → your project → Firestore Database (create in Native mode)
-       - Go to Storage and create a bucket (default is usually project-id.appspot.com). Ensure storageBucket in firebaseConfig matches.
-
-    2) Security rules (development vs production):
-       - For quick testing you can allow open writes (NOT for production).
-         Firestore (temporary):
-           service cloud.firestore {
-             match /databases/{database}/documents {
-               match /{document=**} { allow read, write: if true; }
-             }
-           }
-         Storage (temporary):
-           rules_version = '2';
-           service firebase.storage {
-             match /b/{bucket}/o {
-               match /{allPaths=**} { allow read, write: if true; }
-             }
-           }
-       - For production: restrict writes to admins. Recommended pattern:
-         - Create an `admins/{uid}` doc for admin UIDs and enforce writes only if request.auth.uid exists in admins.
-         - Or use server-side Admin SDK to set custom claims and check request.auth.token.admin == true in rules.
-
-    3) Admin authentication:
-       - This file uses a client-side access code (convenient for single contributor).
-       - For stronger protection: use Firebase Auth + custom claims or a server verification endpoint.
-
-    4) Storage cleanup:
-       - Images uploaded are saved with path `products/{docId}/{timestamp}_{filename}` and the path is saved in the Firestore product doc (so deletes can remove files).
-       - Deleting product attempts to delete storage files referenced in the doc (best-effort).
-
-    5) Troubleshooting:
-       - If uploads fail, open DevTools Console and check for errors like "auth/configuration-not-found" or "permission-denied".
-       - Common cause: storageBucket in firebaseConfig doesn't match your Firebase project's bucket string from Project Settings.
-
-    6) Want me to:
-       - Replace the client-side access code with a hashed code (safer), or
-       - Integrate Firebase Auth & Admin claims flow (best for production),
-       - Or scaffold a Vite + React project connected to Firebase with CI/CD deployment to Firebase Hosting?
+    Notes:
+    - Admin UI now opens only on a press-and-hold (long-press) of the top-left admin button (~700ms).
+      - Long-press when not admin -> shows access-code modal (enter your code).
+      - Long-press when already admin -> opens upload modal.
+    - A small "Sign out" button is visible next to ADMIN ACTIVE to allow signing out without long-pressing.
+    - Firestore+Storage integration remains: if configured the app saves products to Firestore and images to Storage; otherwise it falls back to localStorage.
+    - If you want the access-code hidden, I can swap to the hashed flow (compute and embed SHA-256 hash) next.
   -->
 </body>
 </html>
