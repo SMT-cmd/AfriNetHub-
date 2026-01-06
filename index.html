@@ -5,31 +5,21 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>AFRINETHUB — Live</title>
 
-  <!-- Tailwind CDN for styling -->
+  <!-- Tailwind CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
 
   <style>
-    /* Minor niceties */
     html,body,#root { height: 100%; }
     body { background: #0f1724; color: #e6eef8; font-family: Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial; }
-
-    /* avoid backdrop blocking clicks when invisible */
-    .modal-backdrop { pointer-events: none; }
-    .modal-backdrop.visible { pointer-events: auto; }
-
-    /* small carousel controls styling */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .animate-in { animation: fadeIn .18s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: translateY(0) } }
+    .btn-disabled { opacity: 0.6; pointer-events: none; cursor: not-allowed; }
     .img-control { background: rgba(15,23,36,0.6); width:36px; height:36px; display:inline-flex; align-items:center; justify-content:center; border-radius:9999px; color:#fff; transition:background .15s; }
     .img-control:hover { background: rgba(255,255,255,0.12); }
     .img-indicators { gap:6px; display:inline-flex; align-items:center; }
     .img-indicators button { width:8px; height:8px; border-radius:9999px; background: rgba(148,163,184,0.25); border: none; padding:0; }
     .img-indicators button.active { background:#f59e0b; }
-
-    /* ensure modals are above everything */
-    .modal { z-index: 120 !important; }
-    .backdrop { z-index: 110 !important; }
-
-    /* small helper for disabled button look */
-    .btn-disabled { opacity: 0.6; cursor: not-allowed; pointer-events: none; }
   </style>
 </head>
 <body>
@@ -40,7 +30,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
 
-  <!-- React & ReactDOM UMD + Babel -->
+  <!-- React & ReactDOM + Babel for in-browser JSX -->
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -48,9 +38,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useMemo } = React;
 
-    /******************************************************************
-     * FIREBASE CONFIG (kept from earlier)
-     ******************************************************************/
+    // ---------- FIREBASE CONFIG ----------
     const firebaseConfig = {
       apiKey: "AIzaSyDmzzR9iOp19RbM0uY19aKzJ9T3Nm5_6-k",
       authDomain: "afrinethub.firebaseapp.com",
@@ -61,40 +49,45 @@
       measurementId: "G-KCZD4HLCQ1"
     };
 
-    // init firebase (if config present)
-    if (firebaseConfig && firebaseConfig.apiKey) {
-      try { firebase.initializeApp(firebaseConfig); } catch(e) { console.warn('Firebase init warning', e); }
-    } else {
-      console.warn('Firebase config missing - app will run in local-only mode.');
+    let db = null;
+    let storage = null;
+
+    try {
+      if (firebaseConfig && firebaseConfig.apiKey) {
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.firestore();
+        storage = firebase.storage();
+        console.log('Firebase initialized');
+      }
+    } catch (e) {
+      console.warn('Firebase init failed', e);
     }
 
-    const db = (firebase && firebase.firestore) ? firebase.firestore() : null;
-    const storage = (firebase && firebase.storage) ? firebase.storage() : null;
-
-    // ---------------- Icons ----------------
+    // ---------- UI icons ----------
     const Icon = ({ children, className = "w-5 h-5", ...props }) => (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={className} {...props}>
         {children}
       </svg>
     );
-    const ShoppingCart = (p) => <Icon {...p}><path d="M3 3h2l.4 2M7 13h10l3-8H6.4" strokeLinecap="round" strokeLinejoin="round"/><circle cx="10" cy="20" r="1" /><circle cx="18" cy="20" r="1" /></Icon>;
-    const MessageCircle = (p) => <Icon {...p}><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8A8.5 8.5 0 1 1 11.5 3" strokeLinecap="round" strokeLinejoin="round" /><path d="M21 21l-5.2-3" strokeLinecap="round" strokeLinejoin="round" /></Icon>;
-    const Menu = (p) => <Icon {...p}><path d="M4 6h16M4 12h16M4 18h16" strokeLinecap="round" strokeLinejoin="round" /></Icon>;
-    const X = (p) => <Icon {...p}><path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" /></Icon>;
-    const Search = (p) => <Icon {...p}><path d="M21 21l-4.35-4.35" strokeLinecap="round" strokeLinejoin="round" /><circle cx="11" cy="11" r="6" /></Icon>;
-    const Plus = (p) => <Icon {...p}><path d="M12 5v14M5 12h14" strokeLinecap="round" strokeLinejoin="round" /></Icon>;
-    const Trash = (p) => <Icon {...p}><path d="M3 6h18M8 6v12a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V6" strokeLinecap="round" strokeLinejoin="round"/><path d="M10 10v6M14 10v6" strokeLinecap="round" strokeLinejoin="round" /></Icon>;
-    const Edit = (p) => <Icon {...p}><path d="M3 21v-3l11-11 3 3L6 21H3z" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 7l3 3" strokeLinecap="round" strokeLinejoin="round"/></Icon>;
-    const Lock = (p) => <Icon {...p}><rect x="3" y="11" width="18" height="10" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" strokeLinecap="round" strokeLinejoin="round"/></Icon>;
-    const Upload = (p) => <Icon {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" strokeLinecap="round" strokeLinejoin="round"/><path d="M17 8l-5-5-5 5M12 3v12" strokeLinecap="round" strokeLinejoin="round"/></Icon>;
-    const Prev = (p) => <Icon {...p}><path d="M15 6l-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" /></Icon>;
-    const Next = (p) => <Icon {...p}><path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" /></Icon>;
+    const ShoppingCart = (p) => (<Icon {...p}><path d="M3 3h2l.4 2M7 13h10l3-8H6.4" strokeLinecap="round" strokeLinejoin="round"/><circle cx="10" cy="20" r="1" /><circle cx="18" cy="20" r="1" /></Icon>);
+    const MessageCircle = (p) => (<Icon {...p}><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8A8.5 8.5 0 1 1 11.5 3" strokeLinecap="round" strokeLinejoin="round" /><path d="M21 21l-5.2-3" strokeLinecap="round" strokeLinejoin="round" /></Icon>);
+    const Menu = (p) => (<Icon {...p}><path d="M4 6h16M4 12h16M4 18h16" strokeLinecap="round" strokeLinejoin="round" /></Icon>);
+    const X = (p) => (<Icon {...p}><path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" /></Icon>);
+    const Search = (p) => (<Icon {...p}><path d="M21 21l-4.35-4.35" strokeLinecap="round" strokeLinejoin="round" /><circle cx="11" cy="11" r="6" /></Icon>);
+    const Plus = (p) => (<Icon {...p}><path d="M12 5v14M5 12h14" strokeLinecap="round" strokeLinejoin="round" /></Icon>);
+    const Trash = (p) => (<Icon {...p}><path d="M3 6h18M8 6v12a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V6" strokeLinecap="round" strokeLinejoin="round"/><path d="M10 10v6M14 10v6" strokeLinecap="round" strokeLinejoin="round" /></Icon>);
+    const Edit = (p) => (<Icon {...p}><path d="M3 21v-3l11-11 3 3L6 21H3z" strokeLinecap="round" strokeLinejoin="round"/><path d="M14 7l3 3" strokeLinecap="round" strokeLinejoin="round"/></Icon>);
+    const Lock = (p) => (<Icon {...p}><rect x="3" y="11" width="18" height="10" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" strokeLinecap="round" strokeLinejoin="round"/></Icon>);
+    const Upload = (p) => (<Icon {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" strokeLinecap="round" strokeLinejoin="round"/><path d="M17 8l-5-5-5 5M12 3v12" strokeLinecap="round" strokeLinejoin="round"/></Icon>);
+    const Prev = (p) => (<Icon {...p}><path d="M15 6l-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" /></Icon>);
+    const Next = (p) => (<Icon {...p}><path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" /></Icon>);
 
-    // ---------------- constants/helpers ----------------
+    // ---------- constants & helpers ----------
     const LOCAL_STORAGE_CART_KEY = 'afri_cart_v1';
-    const LOCAL_STORAGE_ADMIN_FLAG = 'afri_is_admin';
     const OFFICIAL_WHATSAPP = '2348140813999';
     const NAIRA = '₦';
+    const ADMIN_PLAIN_PASSCODE = '#112AfriNethubnodeyplay112#'; // your chosen passcode
+
     const formatMoney = (amount) => NAIRA + Number(amount || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
 
     const useLocalStorageState = (key, initial) => {
@@ -112,43 +105,28 @@
       return [state, setState];
     };
 
-    // ---------------- PLAIN PASSCODE (Option B) ----------------
-    // Plain passcode is embedded as requested.
-    // WARNING: visible in source.
-    const ADMIN_PLAIN_PASSCODE = '#112AfriNethubnodeyplay112#';
-
-    // ---------------- ProductCard ----------------
+    // ---------- ProductCard ----------
     function ProductCard({ product, isAdmin, onAddToCart, onEdit, onDelete }) {
       const [idx, setIdx] = useState(0);
       const images = product.images || [];
       const urls = images.map(i => (typeof i === 'string' ? i : (i.url || '')));
       useEffect(() => { if (idx >= urls.length) setIdx(0); }, [urls.length]);
-      const prev = (e) => { e.stopPropagation(); setIdx(i => (i - 1 + urls.length) % urls.length); };
-      const next = (e) => { e.stopPropagation(); setIdx(i => (i + 1) % urls.length); };
-      const goTo = (i, e) => { e && e.stopPropagation(); setIdx(i); };
 
       return (
-        <article className="group bg-slate-900 rounded-3xl overflow-hidden border border-slate-800 relative flex flex-col shadow-xl">
-          <div className="h-64 relative overflow-hidden bg-slate-800">
+        <article className="group bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 relative flex flex-col">
+          <div className="h-64 bg-slate-800 relative overflow-hidden">
             <img src={urls[idx]} alt={`${product.name} • ${product.brand}`} loading="lazy" className="w-full h-full object-cover transition-transform group-hover:scale-105" />
             <div className="absolute top-4 left-4">
-              <span className="bg-slate-950/80 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-bold uppercase">{product.category}</span>
+              <span className="bg-slate-950/80 px-3 py-1 rounded-full text-xs font-bold uppercase">{product.category}</span>
             </div>
 
             {urls.length > 1 && (
               <>
                 <div className="absolute inset-y-0 left-3 flex items-center">
-                  <button onClick={prev} aria-label="Previous image" className="img-control"><Prev className="w-4 h-4" /></button>
+                  <button onClick={(e)=>{ e.stopPropagation(); setIdx(i => (i - 1 + urls.length) % urls.length); }} aria-label="Previous" className="img-control"><Prev className="w-4 h-4" /></button>
                 </div>
                 <div className="absolute inset-y-0 right-3 flex items-center">
-                  <button onClick={next} aria-label="Next image" className="img-control"><Next className="w-4 h-4" /></button>
-                </div>
-                <div className="absolute bottom-3 left-1/2 -translate-x-1/2">
-                  <div className="img-indicators">
-                    {urls.map((_, i) => (
-                      <button key={i} onClick={(e) => goTo(i, e)} className={i === idx ? 'active' : ''} aria-label={`Show image ${i+1}`} />
-                    ))}
-                  </div>
+                  <button onClick={(e)=>{ e.stopPropagation(); setIdx(i => (i + 1) % urls.length); }} aria-label="Next" className="img-control"><Next className="w-4 h-4" /></button>
                 </div>
               </>
             )}
@@ -160,18 +138,18 @@
             <p className="text-slate-400 text-sm mb-4 italic line-clamp-1">"{product.description}"</p>
 
             <div className="flex items-center justify-between mt-auto">
-              <div className="flex flex-col">
-                {product.oldPrice > product.price && <span className="text-xs text-slate-500 line-through">{formatMoney(product.oldPrice)}</span>}
-                <span className="text-2xl font-black text-amber-400">{formatMoney(product.price)}</span>
+              <div>
+                {product.oldPrice > product.price && <div className="text-xs text-slate-500 line-through">{formatMoney(product.oldPrice)}</div>}
+                <div className="text-2xl font-black text-amber-400">{formatMoney(product.price)}</div>
               </div>
 
               {isAdmin ? (
                 <div className="flex gap-2">
-                  <button onClick={() => onEdit(product)} className="p-2 bg-slate-800 text-blue-400 rounded-lg" aria-label={`Edit ${product.name}`}><Edit /></button>
-                  <button onClick={() => onDelete(product.id)} className="p-2 bg-slate-800 text-red-400 rounded-lg" aria-label={`Delete ${product.name}`}><Trash /></button>
+                  <button onClick={() => onEdit(product)} className="p-2 bg-slate-800 rounded text-blue-400"><Edit /></button>
+                  <button onClick={() => onDelete(product.id)} className="p-2 bg-slate-800 rounded text-red-400"><Trash /></button>
                 </div>
               ) : (
-                <button onClick={() => onAddToCart(product)} className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-slate-900 px-4 py-2 rounded-xl font-bold transition-all">
+                <button onClick={() => onAddToCart(product)} className="flex items-center gap-2 bg-amber-400 text-slate-900 px-4 py-2 rounded font-bold">
                   <ShoppingCart /> Add to Cart
                 </button>
               )}
@@ -181,10 +159,12 @@
       );
     }
 
-    // ---------------- App ----------------
+    // ---------- App ----------
     function App() {
-      // UI & admin state
-      const [isAdmin, setIsAdmin] = useState(false);
+      // admin + UI
+      const [isAdmin, setIsAdmin] = useState(() => {
+        try { return localStorage.getItem('afri_is_admin') === '1'; } catch { return false; }
+      });
       const [showLogin, setShowLogin] = useState(false);
       const [loginCode, setLoginCode] = useState('');
       const [activeCategory, setActiveCategory] = useState('All');
@@ -195,47 +175,80 @@
       const fileInputRef = useRef(null);
 
       // products & cart
-      const [products, setProducts] = useState([]);
+      const [products, setProducts] = useState([]); // we'll load from Firestore or fallback to demo defaults
       const [cart, setCart] = useLocalStorageState(LOCAL_STORAGE_CART_KEY, []);
       const [showCart, setShowCart] = useState(false);
 
-      // form / upload
+      // form
       const [formData, setFormData] = useState({ name:'', category:'Phones', brand:'', price:'', oldPrice:'', images:[], newFiles:[], description:'' });
       const [isSaving, setIsSaving] = useState(false);
 
-      const categories = ['All', 'Cars', 'Phones', 'Laptops', 'Tablets', 'Watches'];
+      // default local products (fallback)
+      const localDefaults = [
+        {
+          id: 1,
+          name: 'Toyota Camry 2022 XLE',
+          category: 'Cars',
+          brand: 'Toyota',
+          price: 28500000,
+          oldPrice: 30000000,
+          images: ['https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?w=1200&q=60'],
+          description: 'Foreign Used, Full Option'
+        },
+        {
+          id: 2,
+          name: 'iPhone 16 Pro Max',
+          category: 'Phones',
+          brand: 'Apple',
+          price: 2150000,
+          oldPrice: 2300000,
+          images: ['https://images.unsplash.com/photo-1727116195101-72f85bc67858?w=1200&q=60'],
+          description: '256GB, Desert Titanium'
+        }
+      ];
 
-      // load admin flag from localStorage
+      // Load products: prefer Firestore if available, else local defaults
       useEffect(() => {
-        try {
-          const stored = localStorage.getItem(LOCAL_STORAGE_ADMIN_FLAG);
-          setIsAdmin(stored === '1');
-        } catch { setIsAdmin(false); }
+        if (db) {
+          const unsub = db.collection('products').orderBy('createdAt','desc').onSnapshot(snap => {
+            const arr = [];
+            snap.forEach(d => arr.push({ id: d.id, ...d.data() }));
+            setProducts(arr);
+          }, err => {
+            console.error('Firestore listen error', err);
+            setProducts(localDefaults);
+          });
+          return () => unsub();
+        } else {
+          // fallback
+          const persisted = localStorage.getItem('afri_products_v3');
+          if (persisted) {
+            try { setProducts(JSON.parse(persisted)); } catch { setProducts(localDefaults); }
+          } else setProducts(localDefaults);
+        }
       }, []);
 
-      // subscribe products if Firestore available
+      // persist local products when Firestore not available and products change
       useEffect(() => {
-        if (!db) return;
-        const unsubscribe = db.collection('products').orderBy('createdAt','desc').onSnapshot(snap => {
-          const arr = [];
-          snap.forEach(doc => arr.push({ id: doc.id, ...doc.data() }));
-          setProducts(arr);
-        }, err => console.error('Firestore subscription error', err));
-        return () => unsubscribe();
-      }, []);
+        if (!db) {
+          try { localStorage.setItem('afri_products_v3', JSON.stringify(products)); } catch {}
+        }
+      }, [products]);
 
+      // editing -> populate formData
       useEffect(() => {
-        if (!editingProduct) return;
-        setFormData({
-          name: editingProduct.name || '',
-          category: editingProduct.category || 'Phones',
-          brand: editingProduct.brand || '',
-          price: editingProduct.price || '',
-          oldPrice: editingProduct.oldPrice || '',
-          images: editingProduct.images || [],
-          newFiles: [],
-          description: editingProduct.description || ''
-        });
+        if (editingProduct) {
+          setFormData({
+            name: editingProduct.name || '',
+            category: editingProduct.category || 'Phones',
+            brand: editingProduct.brand || '',
+            price: editingProduct.price || '',
+            oldPrice: editingProduct.oldPrice || '',
+            images: editingProduct.images || [],
+            newFiles: [],
+            description: editingProduct.description || ''
+          });
+        }
       }, [editingProduct]);
 
       // CART helpers
@@ -245,9 +258,7 @@
         setCart(prev => {
           const idx = prev.findIndex(p => p.id === product.id);
           if (idx >= 0) {
-            const next = [...prev];
-            next[idx] = { ...next[idx], qty: next[idx].qty + 1 };
-            return next;
+            const next = [...prev]; next[idx] = { ...next[idx], qty: next[idx].qty + 1 }; return next;
           }
           return [{ ...product, qty: 1 }, ...prev];
         });
@@ -273,36 +284,29 @@
         window.open(`https://wa.me/${OFFICIAL_WHATSAPP}?text=${encodeURIComponent(message)}`, '_blank');
       };
 
-      // ACCESS CODE (plain)
+      // ---------- Access code login (plain) ----------
       const handleAccessCodeLogin = () => {
-        try {
-          if (!loginCode || loginCode.trim() === '') { alert('Enter access code'); return; }
-          if (loginCode.trim() === ADMIN_PLAIN_PASSCODE) {
-            localStorage.setItem(LOCAL_STORAGE_ADMIN_FLAG, '1');
-            setIsAdmin(true);
-            setShowLogin(false);
-            setLoginCode('');
-          } else {
-            alert('Wrong access code.');
-          }
-        } catch (err) {
-          console.error(err);
-          alert('Login failed');
+        if (!loginCode || loginCode.trim() === '') { alert('Enter access code'); return; }
+        if (loginCode.trim() === ADMIN_PLAIN_PASSCODE) {
+          try { localStorage.setItem('afri_is_admin','1'); } catch {}
+          setIsAdmin(true);
+          setShowLogin(false);
+          setLoginCode('');
+        } else {
+          alert('Wrong access code.');
         }
       };
 
       const handleSignOut = () => {
-        localStorage.removeItem(LOCAL_STORAGE_ADMIN_FLAG);
+        try { localStorage.removeItem('afri_is_admin'); } catch {}
         setIsAdmin(false);
       };
 
-      // IMAGE UPLOAD: previews & newFiles
+      // ---------- Image upload (previews + newFiles) ----------
       const handleImageUpload = (e) => {
         const files = Array.from(e.target.files || []);
-        if (files.length + formData.images.length > 8) {
-          alert('Maximum 8 images allowed');
-          return;
-        }
+        if (files.length + formData.images.length > 8) { alert('Maximum 8 images allowed'); return; }
+
         files.forEach(file => {
           const reader = new FileReader();
           reader.onloadend = () => {
@@ -321,7 +325,7 @@
         });
       };
 
-      // SAVE PRODUCT: improved, disables button and shows alerts on success/failure
+      // ---------- Save product (uploads to Storage + writes Firestore) ----------
       const handleSaveProduct = async (e) => {
         if (e && e.preventDefault) e.preventDefault();
 
@@ -330,89 +334,103 @@
 
         setIsSaving(true);
         try {
-          if (!db || !storage) {
-            throw new Error('Firebase not initialized correctly (db or storage missing). Check firebaseConfig.');
-          }
+          // If Firebase is configured, use it. Otherwise fall back to local update.
+          if (db && storage) {
+            // docRef (create id first)
+            let docRef;
+            if (editingProduct && editingProduct.id) docRef = db.collection('products').doc(String(editingProduct.id));
+            else docRef = db.collection('products').doc();
 
-          // prepare docRef (use id early for storage paths)
-          let docRef;
-          if (editingProduct && editingProduct.id) {
-            docRef = db.collection('products').doc(String(editingProduct.id));
+            // upload newFiles (if any)
+            const uploaded = [];
+            for (let i = 0; i < (formData.newFiles || []).length; i++) {
+              const file = formData.newFiles[i];
+              const path = `products/${docRef.id}/${Date.now()}_${file.name}`;
+              const ref = storage.ref().child(path);
+              const snap = await ref.put(file);
+              const url = await snap.ref.getDownloadURL();
+              uploaded.push({ path, url });
+            }
+
+            // existingRemote (already have url or object)
+            const existingRemote = (formData.images || []).filter(i => {
+              if (typeof i === 'string') return i.startsWith('http'); // remote url
+              return i && i.url; // object {path, url}
+            }).map(i => (typeof i === 'string' ? { path: null, url: i } : { path: i.path || null, url: i.url }));
+
+            const finalImages = [...existingRemote, ...uploaded];
+
+            const payload = {
+              name: formData.name,
+              category: formData.category,
+              brand: formData.brand,
+              price: Number(formData.price),
+              oldPrice: formData.oldPrice ? Number(formData.oldPrice) : 0,
+              images: finalImages,
+              description: formData.description || '',
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            if (!editingProduct) payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+
+            await docRef.set(payload, { merge: true });
+
+            alert('Product saved to catalog.');
           } else {
-            docRef = db.collection('products').doc();
+            // fallback: local only
+            const normalized = {
+              ...formData,
+              id: editingProduct ? editingProduct.id : Date.now(),
+              price: Number(formData.price),
+              oldPrice: formData.oldPrice ? Number(formData.oldPrice) : 0
+            };
+            if (editingProduct) setProducts(prev => prev.map(p => p.id === editingProduct.id ? normalized : p));
+            else setProducts(prev => [normalized, ...prev]);
+            alert('Product saved locally (Firestore not configured).');
           }
 
-          // upload newFiles
-          const uploaded = [];
-          for (let i = 0; i < (formData.newFiles || []).length; i++) {
-            const file = formData.newFiles[i];
-            const path = `products/${docRef.id}/${Date.now()}_${file.name}`;
-            const ref = storage.ref().child(path);
-            const snap = await ref.put(file);
-            const url = await snap.ref.getDownloadURL();
-            uploaded.push({ path, url });
-          }
-
-          // collect existing remote images (objects or urls)
-          const existingRemote = (formData.images || []).filter(i => {
-            if (typeof i === 'string') return i.startsWith('http');
-            return i && i.url;
-          }).map(i => (typeof i === 'string' ? { path: null, url: i } : { path: i.path || null, url: i.url }));
-
-          const finalImages = [...existingRemote, ...uploaded];
-
-          const payload = {
-            name: formData.name,
-            category: formData.category,
-            brand: formData.brand,
-            price: Number(formData.price),
-            oldPrice: formData.oldPrice ? Number(formData.oldPrice) : 0,
-            images: finalImages,
-            description: formData.description || '',
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-          };
-          if (!editingProduct) payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-
-          await docRef.set(payload, { merge: true });
-
-          alert('Product saved to catalog.');
+          // reset form
           setShowUploadModal(false);
           setEditingProduct(null);
           setFormData({ name:'', category:'Phones', brand:'', price:'', oldPrice:'', images:[], newFiles:[], description:'' });
+
         } catch (err) {
-          console.error('Save product error:', err);
+          console.error('Save product error', err);
           let msg = err && err.message ? err.message : String(err);
-          if (msg.toLowerCase().includes('permission')) {
-            msg = 'Permission denied — check Firestore / Storage security rules.';
-          }
+          if (msg.toLowerCase().includes('permission')) msg = 'Permission denied — check Firestore/Storage rules.';
           alert('Failed to save product: ' + msg);
         } finally {
           setIsSaving(false);
         }
       };
 
-      // DELETE product
+      // ---------- Delete product (delete storage objects if path present) ----------
       const handleDeleteProduct = async (id) => {
         if (!isAdmin) { alert('Only admins can delete'); return; }
         if (!confirm('Delete this item?')) return;
+
         try {
-          const docRef = db.collection('products').doc(String(id));
-          const snap = await docRef.get();
-          if (snap.exists) {
-            const data = snap.data();
-            if (Array.isArray(data.images)) {
-              for (const img of data.images) {
-                const path = img && img.path ? img.path : null;
-                if (path) {
-                  try { await storage.ref().child(path).delete(); } catch (e) { console.warn('Failed delete', path, e); }
+          if (db && storage) {
+            const docRef = db.collection('products').doc(String(id));
+            const snap = await docRef.get();
+            if (snap.exists) {
+              const data = snap.data();
+              if (Array.isArray(data.images)) {
+                for (const img of data.images) {
+                  const path = img && img.path ? img.path : null;
+                  if (path) {
+                    try { await storage.ref().child(path).delete(); } catch (e) { console.warn('Failed to delete storage path', path, e); }
+                  }
                 }
               }
             }
-            await docRef.delete();
+            await db.collection('products').doc(String(id)).delete();
+          } else {
+            // local fallback
+            setProducts(prev => prev.filter(p => p.id !== id));
           }
           setCart(prev => prev.filter(c => c.id !== id));
         } catch (err) {
-          console.error('Delete product error', err);
+          console.error('Delete error', err);
           alert('Failed to delete product');
         }
       };
@@ -430,13 +448,14 @@
         });
       }, [products, searchTerm, activeCategory]);
 
+      // Render
       return (
         <div className="min-h-screen">
           {/* NAV */}
           <nav className="fixed w-full z-50 bg-slate-900/80 backdrop-blur border-b border-slate-800">
             <div className="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <button onClick={() => (isAdmin ? handleSignOut() : setShowLogin(s => !s))} className={`p-2 rounded-lg ${isAdmin ? 'bg-red-500' : 'bg-amber-400 text-slate-900'}`} aria-label="Admin">
+                <button onClick={() => (isAdmin ? handleSignOut() : setShowLogin(true))} className={`p-2 rounded-lg ${isAdmin ? 'bg-red-500' : 'bg-amber-400 text-slate-900'}`} aria-label="Admin">
                   <ShoppingCart className="w-5 h-5" />
                 </button>
                 <div>
@@ -445,178 +464,136 @@
                 </div>
               </div>
 
-              <div className="hidden md:flex items-center gap-8 text-sm font-medium">
-                {categories.map(cat => (
-                  <button key={cat} onClick={() => setActiveCategory(cat)} className={`${activeCategory === cat ? 'text-amber-400' : 'text-slate-400 hover:text-white'}`} aria-pressed={activeCategory === cat}>
-                    {cat}
-                  </button>
+              <div className="hidden md:flex items-center gap-4">
+                {['All','Cars','Phones','Laptops','Tablets','Watches'].map(cat => (
+                  <button key={cat} onClick={()=>setActiveCategory(cat)} className={`text-sm px-3 py-1 rounded ${activeCategory===cat?'bg-amber-500 text-slate-900':'text-slate-400 hover:text-white'}`}>{cat}</button>
                 ))}
 
-                {isAdmin && <button onClick={() => setShowUploadModal(true)} className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-500"><Plus /> New Product</button>}
+                {isAdmin && <button onClick={()=>setShowUploadModal(true)} className="bg-green-600 px-3 py-2 rounded text-white flex items-center gap-2"><Plus/> New</button>}
 
-                <button onClick={() => setShowCart(true)} className="relative p-2 bg-slate-800 rounded-lg border border-slate-700" aria-label="Open cart">
-                  <ShoppingCart size={20} />
-                  {cart.length > 0 && (
-                    <span className="absolute -top-2 -right-2 bg-amber-500 text-slate-900 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center border-2 border-slate-950">
-                      {cart.reduce((sum, i) => sum + (i.qty || 1), 0)}
-                    </span>
-                  )}
+                <button onClick={()=>setShowCart(true)} className="relative p-2 bg-slate-800 rounded">
+                  <ShoppingCart />
+                  {cart.length > 0 && (<span className="absolute -top-2 -right-2 bg-amber-400 text-slate-900 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center border-2 border-slate-900">{cart.reduce((s,i)=>s+(i.qty||1),0)}</span>)}
                 </button>
               </div>
 
-              <button className="md:hidden" onClick={() => setIsMenuOpen(!isMenuOpen)} aria-label="Toggle menu">
+              <button className="md:hidden p-2" onClick={()=>setIsMenuOpen(!isMenuOpen)} aria-label="Toggle">
                 {isMenuOpen ? <X /> : <Menu />}
               </button>
             </div>
           </nav>
 
           {/* HERO */}
-          <section className="pt-32 pb-10 px-4">
+          <header className="pt-28 pb-10 px-4">
             <div className="max-w-7xl mx-auto">
-              <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-[2rem] p-8 md:p-16 border border-slate-700 relative overflow-hidden">
-                <div className="relative z-10 max-w-2xl">
-                  <h1 className="text-4xl md:text-6xl font-bold leading-tight mb-6">Direct Sales from <span className="text-amber-400">AfriNethub</span> Global.</h1>
-                  <p className="text-slate-400 text-lg mb-8">Premium Autos and the latest Tech gadgets. Quality you can trust.</p>
-                  {isAdmin && <button onClick={() => setShowUploadModal(true)} className="bg-amber-500 text-slate-900 px-6 py-3 rounded-xl font-bold">Quick Upload Item</button>}
-                </div>
-                <div className="absolute top-0 right-0 w-1/3 h-full bg-amber-500/5 blur-[100px]" />
+              <div className="rounded-2xl p-8 md:p-16 bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700">
+                <h1 className="text-3xl md:text-5xl font-bold">Direct Sales from <span className="text-amber-400">AfriNethub</span> Global</h1>
+                <p className="text-slate-400 mt-4">Premium Autos & latest tech. Quality you can trust.</p>
+                {isAdmin && <button onClick={()=>setShowUploadModal(true)} className="mt-6 bg-amber-400 text-slate-900 px-4 py-2 rounded">Quick Upload Item</button>}
               </div>
             </div>
-          </section>
+          </header>
 
-          {/* SEARCH & CATEGORIES */}
+          {/* SEARCH / CATS */}
           <section className="sticky top-20 z-30 bg-slate-950/80 backdrop-blur-md py-4 border-b border-slate-800">
-            <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row gap-4 justify-between items-center">
+            <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row gap-4 items-center">
               <div className="relative w-full md:w-96">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
-                <input type="text" placeholder="Search items, brands or descriptions..." className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2 pl-10 pr-4 outline-none focus:border-amber-500" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><Search /></div>
+                <input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="Search items, brands or description..." className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2 pl-10 pr-4" />
               </div>
 
               <div className="flex gap-2 overflow-x-auto w-full no-scrollbar">
-                {categories.map(cat => (
-                  <button key={cat} onClick={() => setActiveCategory(cat)} className={`px-4 py-1.5 rounded-full text-xs whitespace-nowrap ${activeCategory === cat ? 'bg-amber-500 text-slate-900 font-bold' : 'bg-slate-900 border border-slate-800 text-slate-400'}`}>
-                    {cat}
-                  </button>
+                {['All','Cars','Phones','Laptops','Tablets','Watches'].map(cat => (
+                  <button key={cat} onClick={()=>setActiveCategory(cat)} className={`px-4 py-1.5 rounded-full text-xs ${activeCategory===cat?'bg-amber-500 text-slate-900 font-bold':'bg-slate-900 border border-slate-800 text-slate-400'}`}>{cat}</button>
                 ))}
               </div>
             </div>
           </section>
 
-          {/* PRODUCTS GRID */}
-          <section className="py-12 px-4 max-w-7xl mx-auto">
+          {/* GRID */}
+          <main className="py-12 px-4 max-w-7xl mx-auto">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
               {filteredProducts.map(product => (
                 <ProductCard key={product.id} product={product} isAdmin={isAdmin} onAddToCart={addToCart} onEdit={startEdit} onDelete={handleDeleteProduct} />
               ))}
             </div>
-          </section>
+          </main>
 
-          {/* CART SIDEBAR (omitted for brevity in this snippet but present above) */}
+          {/* CART */}
           {showCart && (
-            <div className="fixed inset-0 z-[110] flex justify-end" role="dialog" aria-label="Cart">
-              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowCart(false)} aria-hidden="true" />
+            <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-label="Cart">
+              <div className="absolute inset-0 bg-black/60" onClick={()=>setShowCart(false)} aria-hidden="true"></div>
               <aside className="relative w-full max-w-md h-full bg-slate-900 border-l border-slate-800 p-6 flex flex-col">
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-xl font-bold flex items-center gap-2"><ShoppingCart /> YOUR CART</h2>
-                  <button onClick={() => setShowCart(false)} aria-label="Close"><X /></button>
+                  <button onClick={()=>setShowCart(false)} aria-label="Close"><X /></button>
                 </div>
-
                 <div className="flex-1 overflow-y-auto py-2">
                   {cart.length === 0 ? (
-                    <div className="text-center text-slate-500 py-12">
-                      <div className="mb-4"><ShoppingCart className="w-10 h-10" /></div>
-                      Your cart is empty
-                    </div>
-                  ) : (
-                    cart.map(item => (
-                      <div key={item.id} className="bg-slate-800/50 p-4 rounded-xl mb-3 flex gap-3 items-center">
-                        <img src={(item.images && item.images[0] && (item.images[0].url || item.images[0])) || ''} alt={`${item.name} • ${item.brand}`} className="w-16 h-16 object-cover rounded" />
-                        <div className="flex-1">
-                          <div className="font-bold text-sm">{item.name}</div>
-                          <div className="text-amber-400 font-bold">{formatMoney(item.price)}</div>
-                          <div className="mt-2 flex items-center gap-2">
-                            <button onClick={() => changeQty(item.id, (item.qty || 1) - 1)} className="px-2 py-1 bg-slate-800 rounded">-</button>
-                            <div className="font-bold text-sm">{item.qty}</div>
-                            <button onClick={() => changeQty(item.id, (item.qty || 1) + 1)} className="px-2 py-1 bg-slate-800 rounded">+</button>
-                            <button onClick={() => removeFromCart(item.id)} className="ml-3 text-red-400 text-sm flex items-center gap-1"><Trash /> Remove</button>
-                          </div>
+                    <div className="text-center text-slate-500 py-12"><div className="mb-4"><ShoppingCart className="w-10 h-10" /></div>Your cart is empty</div>
+                  ) : cart.map(item => (
+                    <div key={item.id} className="bg-slate-800/50 p-4 rounded-xl mb-3 flex gap-3 items-center">
+                      <img src={(item.images && item.images[0] && (item.images[0].url || item.images[0])) || ''} alt={`${item.name} • ${item.brand}`} className="w-16 h-16 object-cover rounded" />
+                      <div className="flex-1">
+                        <div className="font-bold text-sm">{item.name}</div>
+                        <div className="text-amber-400 font-bold">{formatMoney(item.price)}</div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <button onClick={()=>changeQty(item.id,(item.qty||1)-1)} className="px-2 py-1 bg-slate-800 rounded">-</button>
+                          <div className="font-bold text-sm">{item.qty}</div>
+                          <button onClick={()=>changeQty(item.id,(item.qty||1)+1)} className="px-2 py-1 bg-slate-800 rounded">+</button>
+                          <button onClick={()=>removeFromCart(item.id)} className="ml-3 text-red-400 text-sm flex items-center gap-1"><Trash /> Remove</button>
                         </div>
                       </div>
-                    ))
-                  )}
+                    </div>
+                  ))}
                 </div>
-
                 {cart.length > 0 && (
                   <div className="mt-4">
-                    <div className="flex justify-between items-center mb-4">
-                      <div className="text-slate-400">Total:</div>
-                      <div className="text-2xl font-black">{formatMoney(calculateTotal())}</div>
-                    </div>
-                    <button onClick={handleCheckout} className="w-full bg-green-600 py-3 rounded text-white flex items-center justify-center gap-3">
-                      <MessageCircle /> CHECKOUT VIA WHATSAPP
-                    </button>
+                    <div className="flex justify-between items-center mb-4"><div className="text-slate-400">Total:</div><div className="text-2xl font-black">{formatMoney(calculateTotal())}</div></div>
+                    <button onClick={handleCheckout} className="w-full bg-green-600 py-3 rounded text-white flex items-center justify-center gap-3"><MessageCircle /> CHECKOUT VIA WHATSAPP</button>
                   </div>
                 )}
               </aside>
             </div>
           )}
 
-          {/* ADMIN LOGIN MODAL (ACCESS CODE) */}
-          <div className={`modal-backdrop ${showLogin ? 'visible' : ''} fixed inset-0`} aria-hidden={!showLogin} style={{ display: showLogin ? 'block' : 'none' }} onClick={() => setShowLogin(false)}></div>
+          {/* ADMIN LOGIN modal */}
           {showLogin && (
-            <div className="modal fixed inset-0 z-120 flex items-center justify-center p-4">
-              <div className="bg-slate-900 border border-slate-700 p-8 rounded-3xl w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
-                <div className="flex justify-center mb-6">
-                  <div className="bg-amber-500/20 p-4 rounded-full"><Lock className="text-amber-500 w-8 h-8" /></div>
-                </div>
-                <h2 className="text-2xl font-bold text-center mb-2">Admin Access</h2>
-
-                <input
-                  type="password"
-                  placeholder="Enter access code"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 px-4 mb-3"
-                  value={loginCode}
-                  onChange={(e) => setLoginCode(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAccessCodeLogin()}
-                />
-
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+              <div className="bg-slate-900 p-6 rounded-2xl border border-slate-700 w-full max-w-md">
+                <div className="flex justify-center mb-4"><Lock className="w-8 h-8 text-amber-400" /></div>
+                <h3 className="text-xl font-bold text-center mb-4">Admin Access</h3>
+                <input type="password" value={loginCode} onChange={e=>setLoginCode(e.target.value)} onKeyDown={e=>e.key==='Enter' && handleAccessCodeLogin()} placeholder="Enter access code" className="w-full bg-slate-800 p-3 rounded mb-4" />
                 <div className="flex gap-3">
-                  <button onClick={() => setShowLogin(false)} className="flex-1 py-3 text-slate-400 font-bold">Cancel</button>
-                  <button onClick={handleAccessCodeLogin} className="flex-1 py-3 bg-amber-500 text-slate-900 rounded-xl font-bold hover:bg-amber-400">Unlock</button>
+                  <button onClick={()=>setShowLogin(false)} className="flex-1 text-slate-400">Cancel</button>
+                  <button onClick={handleAccessCodeLogin} className="flex-1 bg-amber-400 text-slate-900 rounded">Unlock</button>
                 </div>
-
-                <p className="text-xs text-slate-500 mt-3">
-                  Note: Access code is embedded in this deployment (single-contributor flow).
-                </p>
               </div>
             </div>
           )}
 
-          {/* UPLOAD / EDIT MODAL */}
-          <div className={`modal-backdrop ${showUploadModal ? 'visible' : ''} fixed inset-0`} aria-hidden={!showUploadModal} style={{ display: showUploadModal ? 'block' : 'none' }} onClick={() => setShowUploadModal(false)}></div>
+          {/* UPLOAD / EDIT modal */}
           {showUploadModal && (
-            <div className="modal fixed inset-0 z-120 flex items-center justify-center p-4 overflow-auto">
-              <div className="bg-slate-900 border border-slate-700 p-6 md:p-8 rounded-3xl w-full max-w-2xl my-8" onClick={(e) => e.stopPropagation()}>
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-2xl font-bold">{editingProduct ? 'Edit Product' : 'Upload New Product'}</h2>
-                  <button onClick={() => { setShowUploadModal(false); setEditingProduct(null); }} aria-label="Close upload modal"><X /></button>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 overflow-auto">
+              <div className="bg-slate-900 p-6 rounded-2xl w-full max-w-2xl border border-slate-700">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold">{editingProduct ? 'Edit Product' : 'Upload New Product'}</h3>
+                  <button onClick={closeModal} aria-label="Close"><X /></button>
                 </div>
 
-                {/* Form: ensure onSubmit is wired and button is clickable */}
                 <form onSubmit={handleSaveProduct} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="md:col-span-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Product Photos (Max 8)</label>
-                    <div className="grid grid-cols-4 gap-2 mb-3">
+                    <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">Product Photos (Max 8)</label>
+                    <div className="grid grid-cols-4 gap-2 mb-2">
                       {formData.images.map((img, idx) => (
-                        <div key={idx} className="aspect-square relative rounded-lg overflow-hidden border border-slate-700">
+                        <div key={idx} className="aspect-square relative rounded overflow-hidden border">
                           <img src={typeof img === 'string' ? img : (img.url || '')} alt={`Preview ${idx+1}`} className="w-full h-full object-cover" />
-                          <button type="button" onClick={() => removeImage(idx)} className="absolute top-1 right-1 bg-red-500 p-1 rounded-full text-white" aria-label={`Remove image ${idx+1}`}><X className="w-3 h-3" /></button>
+                          <button type="button" onClick={()=>removeImage(idx)} className="absolute top-1 right-1 bg-red-500 p-1 rounded text-white"><X className="w-3 h-3" /></button>
                         </div>
                       ))}
                       {formData.images.length < 8 && (
-                        <button type="button" onClick={() => fileInputRef.current.click()} className="aspect-square flex flex-col items-center justify-center border-2 border-dashed border-slate-700 rounded-lg hover:border-amber-500 hover:bg-amber-500/5 transition-all">
-                          <Upload size={20} className="text-slate-500" />
-                          <span className="text-[10px] mt-1 text-slate-500 font-bold uppercase">Add</span>
+                        <button type="button" onClick={()=>fileInputRef.current.click()} className="aspect-square flex items-center justify-center border-2 border-dashed rounded">
+                          <Upload /> <span className="text-xs ml-2">Add</span>
                         </button>
                       )}
                     </div>
@@ -624,44 +601,39 @@
                   </div>
 
                   <div className="md:col-span-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Product Name</label>
-                    <input required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3" placeholder="e.g. iPhone 16 Pro Max" />
+                    <label className="text-xs text-slate-400 uppercase block mb-1">Product Name</label>
+                    <input required value={formData.name} onChange={e=>setFormData({...formData,name:e.target.value})} className="w-full bg-slate-800 p-3 rounded" placeholder="e.g. iPhone 16 Pro Max" />
                   </div>
 
                   <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Category</label>
-                    <select value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3">
-                      {categories.filter(c => c !== 'All').map(c => <option key={c} value={c}>{c}</option>)}
+                    <label className="text-xs text-slate-400 uppercase block mb-1">Category</label>
+                    <select value={formData.category} onChange={e=>setFormData({...formData,category:e.target.value})} className="w-full bg-slate-800 p-3 rounded">
+                      {categories.filter(c=>c!=='All').map(c=><option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
 
                   <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Brand</label>
-                    <input required value={formData.brand} onChange={e => setFormData({ ...formData, brand: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3" placeholder="e.g. Apple" />
+                    <label className="text-xs text-slate-400 uppercase block mb-1">Brand</label>
+                    <input required value={formData.brand} onChange={e=>setFormData({...formData,brand:e.target.value})} className="w-full bg-slate-800 p-3 rounded" placeholder="e.g. Apple" />
                   </div>
 
                   <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Selling Price ({NAIRA})</label>
-                    <input required type="number" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3" />
+                    <label className="text-xs text-slate-400 uppercase block mb-1">Selling Price ({NAIRA})</label>
+                    <input required type="number" value={formData.price} onChange={e=>setFormData({...formData,price:e.target.value})} className="w-full bg-slate-800 p-3 rounded" />
                   </div>
 
                   <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Old Price (Optional)</label>
-                    <input type="number" value={formData.oldPrice} onChange={e => setFormData({ ...formData, oldPrice: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3" />
+                    <label className="text-xs text-slate-400 uppercase block mb-1">Old Price (optional)</label>
+                    <input type="number" value={formData.oldPrice} onChange={e=>setFormData({...formData,oldPrice:e.target.value})} className="w-full bg-slate-800 p-3 rounded" />
                   </div>
 
                   <div className="md:col-span-2">
-                    <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Description</label>
-                    <textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 h-20" />
+                    <label className="text-xs text-slate-400 uppercase block mb-1">Description</label>
+                    <textarea value={formData.description} onChange={e=>setFormData({...formData,description:e.target.value})} className="w-full bg-slate-800 p-3 rounded h-24"></textarea>
                   </div>
 
-                  {/* Important: button is type="submit", enabled when not saving */}
-                  <button
-                    type="submit"
-                    className={`md:col-span-2 bg-amber-500 text-slate-900 py-4 rounded-xl font-bold hover:bg-amber-400 mt-4 shadow-lg shadow-amber-500/20 transition-all ${isSaving ? 'btn-disabled' : ''}`}
-                    disabled={isSaving}
-                  >
-                    {isSaving ? 'Uploading...' : (editingProduct ? 'Update Inventory' : 'Post to Catalog')}
+                  <button type="submit" className={`md:col-span-2 bg-amber-400 text-slate-900 py-3 rounded font-bold ${isSaving ? 'btn-disabled' : ''}`} disabled={isSaving}>
+                    {isSaving ? 'Posting...' : (editingProduct ? 'Update Inventory' : 'Post to Catalog')}
                   </button>
                 </form>
               </div>
@@ -669,13 +641,13 @@
           )}
 
           {/* FOOTER */}
-          <footer className="bg-slate-900 border-t border-slate-800 py-16 px-4 text-center mt-12">
-            <div className="flex flex-col items-center gap-4">
-              <span className="text-2xl font-bold tracking-tighter">AFRINETHUB GLOBAL</span>
-              <p className="text-slate-500 text-sm">Direct High-End Deals • Based in Nigeria</p>
-              <div className="flex gap-4 mt-4">
-                <button className="p-2 bg-slate-800 rounded-lg" aria-label="Instagram"><svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8A8.5 8.5 0 1 1 11.5 3"/></svg></button>
-                <button onClick={() => window.open(`https://wa.me/${OFFICIAL_WHATSAPP}`, '_blank')} className="p-2 bg-slate-800 rounded-lg text-green-500" aria-label="WhatsApp"><MessageCircle /></button>
+          <footer className="bg-slate-900 border-t border-slate-800 py-12 mt-12">
+            <div className="max-w-7xl mx-auto px-4 text-center">
+              <div className="text-2xl font-bold">AFRINETHUB GLOBAL</div>
+              <div className="text-slate-400 mt-2">Direct High-End Deals • Based in Nigeria</div>
+              <div className="flex gap-4 justify-center mt-4">
+                <button className="p-2 bg-slate-800 rounded"><svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8A8.5 8.5 0 1 1 11.5 3"/></svg></button>
+                <button onClick={()=>window.open(`https://wa.me/${OFFICIAL_WHATSAPP}`,'_blank')} className="p-2 bg-slate-800 rounded text-green-400"><MessageCircle /></button>
               </div>
             </div>
           </footer>
@@ -683,18 +655,53 @@
       );
     }
 
-    // Mount app
+    // Mount
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
-
   </script>
 
-  <!-- Notes:
-       - I fixed the grid class (lg:grid-cols-3), added an isSaving state and disabled/post button binding,
-         and ensured modal backdrops won't block clicks when not visible.
-       - The "Post to Catalog" button is type="submit" and the form has onSubmit bound to handleSaveProduct.
-       - If the button still appears unresponsive, open DevTools Console and check for errors.
-       - If you want, I can also add an explicit debug "Enable Admin" button visible only to you (temporary)
-         to force admin mode for testing. -->
+  <!--
+    IMPORTANT NOTES & NEXT STEPS
+
+    1) Enable Firebase services:
+       - Go to Firebase Console → your project → Firestore Database (create in Native mode)
+       - Go to Storage and create a bucket (default is usually project-id.appspot.com). Ensure storageBucket in firebaseConfig matches.
+
+    2) Security rules (development vs production):
+       - For quick testing you can allow open writes (NOT for production).
+         Firestore (temporary):
+           service cloud.firestore {
+             match /databases/{database}/documents {
+               match /{document=**} { allow read, write: if true; }
+             }
+           }
+         Storage (temporary):
+           rules_version = '2';
+           service firebase.storage {
+             match /b/{bucket}/o {
+               match /{allPaths=**} { allow read, write: if true; }
+             }
+           }
+       - For production: restrict writes to admins. Recommended pattern:
+         - Create an `admins/{uid}` doc for admin UIDs and enforce writes only if request.auth.uid exists in admins.
+         - Or use server-side Admin SDK to set custom claims and check request.auth.token.admin == true in rules.
+
+    3) Admin authentication:
+       - This file uses a client-side access code (convenient for single contributor).
+       - For stronger protection: use Firebase Auth + custom claims or a server verification endpoint.
+
+    4) Storage cleanup:
+       - Images uploaded are saved with path `products/{docId}/{timestamp}_{filename}` and the path is saved in the Firestore product doc (so deletes can remove files).
+       - Deleting product attempts to delete storage files referenced in the doc (best-effort).
+
+    5) Troubleshooting:
+       - If uploads fail, open DevTools Console and check for errors like "auth/configuration-not-found" or "permission-denied".
+       - Common cause: storageBucket in firebaseConfig doesn't match your Firebase project's bucket string from Project Settings.
+
+    6) Want me to:
+       - Replace the client-side access code with a hashed code (safer), or
+       - Integrate Firebase Auth & Admin claims flow (best for production),
+       - Or scaffold a Vite + React project connected to Firebase with CI/CD deployment to Firebase Hosting?
+  -->
 </body>
 </html>
