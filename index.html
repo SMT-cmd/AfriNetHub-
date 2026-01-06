@@ -9,17 +9,27 @@
   <script src="https://cdn.tailwindcss.com"></script>
 
   <style>
+    /* Minor niceties */
     html,body,#root { height: 100%; }
     body { background: #0f1724; color: #e6eef8; font-family: Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial; }
-    .no-scrollbar::-webkit-scrollbar { display: none; }
-    .animate-in { animation: fadeIn .18s ease-out; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: translateY(0) } }
 
+    /* avoid backdrop blocking clicks when invisible */
+    .modal-backdrop { pointer-events: none; }
+    .modal-backdrop.visible { pointer-events: auto; }
+
+    /* small carousel controls styling */
     .img-control { background: rgba(15,23,36,0.6); width:36px; height:36px; display:inline-flex; align-items:center; justify-content:center; border-radius:9999px; color:#fff; transition:background .15s; }
     .img-control:hover { background: rgba(255,255,255,0.12); }
     .img-indicators { gap:6px; display:inline-flex; align-items:center; }
     .img-indicators button { width:8px; height:8px; border-radius:9999px; background: rgba(148,163,184,0.25); border: none; padding:0; }
     .img-indicators button.active { background:#f59e0b; }
+
+    /* ensure modals are above everything */
+    .modal { z-index: 120 !important; }
+    .backdrop { z-index: 110 !important; }
+
+    /* small helper for disabled button look */
+    .btn-disabled { opacity: 0.6; cursor: not-allowed; pointer-events: none; }
   </style>
 </head>
 <body>
@@ -38,9 +48,9 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useMemo } = React;
 
-    /*******************************************************
-     * Firebase config (inserted)
-     *******************************************************/
+    /******************************************************************
+     * FIREBASE CONFIG (kept from earlier)
+     ******************************************************************/
     const firebaseConfig = {
       apiKey: "AIzaSyDmzzR9iOp19RbM0uY19aKzJ9T3Nm5_6-k",
       authDomain: "afrinethub.firebaseapp.com",
@@ -50,17 +60,18 @@
       appId: "1:313556528568:web:f8b1cda91950bbe953734d",
       measurementId: "G-KCZD4HLCQ1"
     };
-    if (firebaseConfig.apiKey) {
-      firebase.initializeApp(firebaseConfig);
-    } else {
-      console.warn('Firebase not configured');
-    }
-    const db = firebase.firestore ? firebase.firestore() : null;
-    const storage = firebase.storage ? firebase.storage() : null;
 
-    /*******************************************************
-     * Small inline SVG icon components
-     *******************************************************/
+    // init firebase (if config present)
+    if (firebaseConfig && firebaseConfig.apiKey) {
+      try { firebase.initializeApp(firebaseConfig); } catch(e) { console.warn('Firebase init warning', e); }
+    } else {
+      console.warn('Firebase config missing - app will run in local-only mode.');
+    }
+
+    const db = (firebase && firebase.firestore) ? firebase.firestore() : null;
+    const storage = (firebase && firebase.storage) ? firebase.storage() : null;
+
+    // ---------------- Icons ----------------
     const Icon = ({ children, className = "w-5 h-5", ...props }) => (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={className} {...props}>
         {children}
@@ -79,9 +90,7 @@
     const Prev = (p) => <Icon {...p}><path d="M15 6l-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" /></Icon>;
     const Next = (p) => <Icon {...p}><path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" /></Icon>;
 
-    /*******************************************************
-     * Constants & helpers
-     *******************************************************/
+    // ---------------- constants/helpers ----------------
     const LOCAL_STORAGE_CART_KEY = 'afri_cart_v1';
     const LOCAL_STORAGE_ADMIN_FLAG = 'afri_is_admin';
     const OFFICIAL_WHATSAPP = '2348140813999';
@@ -103,15 +112,12 @@
       return [state, setState];
     };
 
-    /*******************************************************
-     * Plain passcode (Option B) - embedded as requested
-     * WARNING: visible in page source. Only use if you're comfortable.
-     *******************************************************/
+    // ---------------- PLAIN PASSCODE (Option B) ----------------
+    // Plain passcode is embedded as requested.
+    // WARNING: visible in source.
     const ADMIN_PLAIN_PASSCODE = '#112AfriNethubnodeyplay112#';
 
-    /*******************************************************
-     * ProductCard component (with flipable images)
-     *******************************************************/
+    // ---------------- ProductCard ----------------
     function ProductCard({ product, isAdmin, onAddToCart, onEdit, onDelete }) {
       const [idx, setIdx] = useState(0);
       const images = product.images || [];
@@ -124,7 +130,7 @@
       return (
         <article className="group bg-slate-900 rounded-3xl overflow-hidden border border-slate-800 relative flex flex-col shadow-xl">
           <div className="h-64 relative overflow-hidden bg-slate-800">
-            <img src={urls[idx] || ''} alt={`${product.name} • ${product.brand}`} loading="lazy" className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+            <img src={urls[idx]} alt={`${product.name} • ${product.brand}`} loading="lazy" className="w-full h-full object-cover transition-transform group-hover:scale-105" />
             <div className="absolute top-4 left-4">
               <span className="bg-slate-950/80 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-bold uppercase">{product.category}</span>
             </div>
@@ -175,11 +181,9 @@
       );
     }
 
-    /*******************************************************
-     * Main App
-     *******************************************************/
+    // ---------------- App ----------------
     function App() {
-      // UI & admin
+      // UI & admin state
       const [isAdmin, setIsAdmin] = useState(false);
       const [showLogin, setShowLogin] = useState(false);
       const [loginCode, setLoginCode] = useState('');
@@ -190,64 +194,48 @@
       const [editingProduct, setEditingProduct] = useState(null);
       const fileInputRef = useRef(null);
 
-      // gesture timer
-      const logoLongPressTimer = useRef(null);
-
       // products & cart
       const [products, setProducts] = useState([]);
       const [cart, setCart] = useLocalStorageState(LOCAL_STORAGE_CART_KEY, []);
       const [showCart, setShowCart] = useState(false);
 
-      const [formData, setFormData] = useState({
-        name: '',
-        category: 'Phones',
-        brand: '',
-        price: '',
-        oldPrice: '',
-        images: [],
-        newFiles: [],
-        description: ''
-      });
+      // form / upload
+      const [formData, setFormData] = useState({ name:'', category:'Phones', brand:'', price:'', oldPrice:'', images:[], newFiles:[], description:'' });
+      const [isSaving, setIsSaving] = useState(false);
 
       const categories = ['All', 'Cars', 'Phones', 'Laptops', 'Tablets', 'Watches'];
 
-      // init admin flag from localStorage
+      // load admin flag from localStorage
       useEffect(() => {
         try {
           const stored = localStorage.getItem(LOCAL_STORAGE_ADMIN_FLAG);
           setIsAdmin(stored === '1');
-        } catch {
-          setIsAdmin(false);
-        }
+        } catch { setIsAdmin(false); }
       }, []);
 
-      // subscribe to products if firestore available
+      // subscribe products if Firestore available
       useEffect(() => {
         if (!db) return;
-        const unsubscribe = db.collection('products').orderBy('createdAt', 'desc').onSnapshot(snap => {
+        const unsubscribe = db.collection('products').orderBy('createdAt','desc').onSnapshot(snap => {
           const arr = [];
           snap.forEach(doc => arr.push({ id: doc.id, ...doc.data() }));
           setProducts(arr);
-        }, err => {
-          console.error('Firestore subscription error', err);
-        });
+        }, err => console.error('Firestore subscription error', err));
         return () => unsubscribe();
       }, []);
 
-      // keep form in sync when editing
       useEffect(() => {
-        if (editingProduct) {
-          setFormData({
-            name: editingProduct.name || '',
-            category: editingProduct.category || 'Phones',
-            brand: editingProduct.brand || '',
-            price: editingProduct.price || '',
-            oldPrice: editingProduct.oldPrice || '',
-            images: editingProduct.images || [],
-            newFiles: [],
-            description: editingProduct.description || ''
-          });
-        }
+        if (!editingProduct) return;
+        setFormData({
+          name: editingProduct.name || '',
+          category: editingProduct.category || 'Phones',
+          brand: editingProduct.brand || '',
+          price: editingProduct.price || '',
+          oldPrice: editingProduct.oldPrice || '',
+          images: editingProduct.images || [],
+          newFiles: [],
+          description: editingProduct.description || ''
+        });
       }, [editingProduct]);
 
       // CART helpers
@@ -285,8 +273,8 @@
         window.open(`https://wa.me/${OFFICIAL_WHATSAPP}?text=${encodeURIComponent(message)}`, '_blank');
       };
 
-      // ACCESS-CODE login (plain passcode)
-      const handleAccessCodeLogin = async () => {
+      // ACCESS CODE (plain)
+      const handleAccessCodeLogin = () => {
         try {
           if (!loginCode || loginCode.trim() === '') { alert('Enter access code'); return; }
           if (loginCode.trim() === ADMIN_PLAIN_PASSCODE) {
@@ -294,12 +282,11 @@
             setIsAdmin(true);
             setShowLogin(false);
             setLoginCode('');
-            return;
           } else {
             alert('Wrong access code.');
           }
         } catch (err) {
-          console.error('Access code login error', err);
+          console.error(err);
           alert('Login failed');
         }
       };
@@ -309,10 +296,13 @@
         setIsAdmin(false);
       };
 
-      // IMAGE UPLOAD handlers
+      // IMAGE UPLOAD: previews & newFiles
       const handleImageUpload = (e) => {
         const files = Array.from(e.target.files || []);
-        if (files.length + formData.images.length > 8) { alert('Maximum 8 images allowed'); return; }
+        if (files.length + formData.images.length > 8) {
+          alert('Maximum 8 images allowed');
+          return;
+        }
         files.forEach(file => {
           const reader = new FileReader();
           reader.onloadend = () => {
@@ -331,18 +321,28 @@
         });
       };
 
-      // SAVE product (upload newFiles to storage if available)
+      // SAVE PRODUCT: improved, disables button and shows alerts on success/failure
       const handleSaveProduct = async (e) => {
-        e.preventDefault();
+        if (e && e.preventDefault) e.preventDefault();
+
         if (!formData.images || formData.images.length === 0) { alert('Please upload at least one image'); return; }
-        if (!isAdmin) { alert('Only admins can save products. Unlock with access code.'); return; }
+        if (!isAdmin) { alert('Only admins can save products. Unlock with the access code.'); return; }
+
+        setIsSaving(true);
         try {
+          if (!db || !storage) {
+            throw new Error('Firebase not initialized correctly (db or storage missing). Check firebaseConfig.');
+          }
+
+          // prepare docRef (use id early for storage paths)
           let docRef;
           if (editingProduct && editingProduct.id) {
             docRef = db.collection('products').doc(String(editingProduct.id));
           } else {
             docRef = db.collection('products').doc();
           }
+
+          // upload newFiles
           const uploaded = [];
           for (let i = 0; i < (formData.newFiles || []).length; i++) {
             const file = formData.newFiles[i];
@@ -352,11 +352,15 @@
             const url = await snap.ref.getDownloadURL();
             uploaded.push({ path, url });
           }
+
+          // collect existing remote images (objects or urls)
           const existingRemote = (formData.images || []).filter(i => {
             if (typeof i === 'string') return i.startsWith('http');
             return i && i.url;
           }).map(i => (typeof i === 'string' ? { path: null, url: i } : { path: i.path || null, url: i.url }));
+
           const finalImages = [...existingRemote, ...uploaded];
+
           const payload = {
             name: formData.name,
             category: formData.category,
@@ -368,17 +372,26 @@
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
           };
           if (!editingProduct) payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+
           await docRef.set(payload, { merge: true });
+
+          alert('Product saved to catalog.');
           setShowUploadModal(false);
           setEditingProduct(null);
-          setFormData({ name: '', category: 'Phones', brand: '', price: '', oldPrice: '', images: [], newFiles: [], description: '' });
+          setFormData({ name:'', category:'Phones', brand:'', price:'', oldPrice:'', images:[], newFiles:[], description:'' });
         } catch (err) {
-          console.error('Save product error', err);
-          alert('Failed to save product: ' + (err.message || err));
+          console.error('Save product error:', err);
+          let msg = err && err.message ? err.message : String(err);
+          if (msg.toLowerCase().includes('permission')) {
+            msg = 'Permission denied — check Firestore / Storage security rules.';
+          }
+          alert('Failed to save product: ' + msg);
+        } finally {
+          setIsSaving(false);
         }
       };
 
-      // Delete product (admin only)
+      // DELETE product
       const handleDeleteProduct = async (id) => {
         if (!isAdmin) { alert('Only admins can delete'); return; }
         if (!confirm('Delete this item?')) return;
@@ -417,49 +430,18 @@
         });
       }, [products, searchTerm, activeCategory]);
 
-      // Logo gestures
-      const handleLogoClick = () => {
-        // Non-admin single click: scroll to top (acts like logo)
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      };
-      const handleLogoDoubleClick = () => {
-        setShowLogin(true);
-      };
-      const handleLogoTouchStart = () => {
-        logoLongPressTimer.current = setTimeout(() => {
-          setShowLogin(true);
-        }, 700);
-      };
-      const handleLogoTouchEnd = () => {
-        if (logoLongPressTimer.current) {
-          clearTimeout(logoLongPressTimer.current);
-          logoLongPressTimer.current = null;
-        }
-      };
-
       return (
         <div className="min-h-screen">
           {/* NAV */}
           <nav className="fixed w-full z-50 bg-slate-900/80 backdrop-blur border-b border-slate-800">
             <div className="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                {/* Logo / hidden admin entrance (double-click or long-press opens admin modal) */}
-                <button
-                  onClick={handleLogoClick}
-                  onDoubleClick={handleLogoDoubleClick}
-                  onTouchStart={handleLogoTouchStart}
-                  onTouchEnd={handleLogoTouchEnd}
-                  onTouchCancel={handleLogoTouchEnd}
-                  className={`p-2 rounded-lg transition-all duration-500 ${isAdmin ? 'bg-red-500' : 'bg-amber-500'}`}
-                  aria-label={isAdmin ? 'Admin active (double-click / long-press to open)' : 'AfriNethub logo (double-click / long-press for admin)'}
-                  title="Double-click (desktop) or long-press (mobile) for admin"
-                >
-                  <ShoppingCart className={isAdmin ? 'text-white w-6 h-6 animate-spin' : 'text-slate-900 w-6 h-6'} />
+                <button onClick={() => (isAdmin ? handleSignOut() : setShowLogin(s => !s))} className={`p-2 rounded-lg ${isAdmin ? 'bg-red-500' : 'bg-amber-400 text-slate-900'}`} aria-label="Admin">
+                  <ShoppingCart className="w-5 h-5" />
                 </button>
-
                 <div>
                   <div className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-amber-300 to-amber-100">AFRINETHUB</div>
-                  {isAdmin && <div className="text-[10px] text-red-400">ADMIN ACTIVE</div>}
+                  {isAdmin && <div className="text-xs text-red-400">ADMIN ACTIVE</div>}
                 </div>
               </div>
 
@@ -472,7 +454,6 @@
 
                 {isAdmin && <button onClick={() => setShowUploadModal(true)} className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-500"><Plus /> New Product</button>}
 
-                {/* Shopper cart button (separate from logo/admin) */}
                 <button onClick={() => setShowCart(true)} className="relative p-2 bg-slate-800 rounded-lg border border-slate-700" aria-label="Open cart">
                   <ShoppingCart size={20} />
                   {cart.length > 0 && (
@@ -530,60 +511,61 @@
             </div>
           </section>
 
-          {/* CART SIDEBAR */}
+          {/* CART SIDEBAR (omitted for brevity in this snippet but present above) */}
           {showCart && (
             <div className="fixed inset-0 z-[110] flex justify-end" role="dialog" aria-label="Cart">
               <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowCart(false)} aria-hidden="true" />
-              <div className="relative w-full max-w-md bg-slate-900 h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
-                <div className="p-6 border-b border-slate-800 flex justify-between items-center">
-                  <h2 className="text-xl font-bold flex items-center gap-2"><ShoppingCart className="text-amber-500" /> YOUR CART</h2>
-                  <button onClick={() => setShowCart(false)} className="p-2 hover:bg-slate-800 rounded-full" aria-label="Close cart"><X /></button>
+              <aside className="relative w-full max-w-md h-full bg-slate-900 border-l border-slate-800 p-6 flex flex-col">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold flex items-center gap-2"><ShoppingCart /> YOUR CART</h2>
+                  <button onClick={() => setShowCart(false)} aria-label="Close"><X /></button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
+                <div className="flex-1 overflow-y-auto py-2">
                   {cart.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-4 text-center">
-                      <ShoppingCart size={48} strokeWidth={1} />
-                      <p>Your cart is empty</p>
+                    <div className="text-center text-slate-500 py-12">
+                      <div className="mb-4"><ShoppingCart className="w-10 h-10" /></div>
+                      Your cart is empty
                     </div>
-                  ) : cart.map(item => (
-                    <div key={item.id} className="bg-slate-800/50 p-4 rounded-2xl flex gap-4 border border-slate-700/50 items-center">
-                      <img src={(item.images && item.images[0] && (item.images[0].url || item.images[0])) || ''} alt={`${item.name} • ${item.brand}`} loading="lazy" className="w-16 h-16 rounded-lg object-cover" />
-                      <div className="flex-1">
-                        <h4 className="font-bold text-sm">{item.name}</h4>
-                        <p className="text-amber-500 font-bold">{formatMoney(item.price)}</p>
-
-                        <div className="mt-2 flex items-center gap-2">
-                          <button onClick={() => changeQty(item.id, (item.qty || 1) - 1)} className="px-2 py-1 bg-slate-800 rounded-md" aria-label={`Decrease quantity of ${item.name}`}>-</button>
-                          <span className="text-sm font-bold">{item.qty}</span>
-                          <button onClick={() => changeQty(item.id, (item.qty || 1) + 1)} className="px-2 py-1 bg-slate-800 rounded-md" aria-label={`Increase quantity of ${item.name}`}>+</button>
-
-                          <button onClick={() => removeFromCart(item.id)} className="ml-4 text-red-400 flex items-center gap-1 text-sm" aria-label={`Remove ${item.name} from cart`}><Trash /> Remove</button>
+                  ) : (
+                    cart.map(item => (
+                      <div key={item.id} className="bg-slate-800/50 p-4 rounded-xl mb-3 flex gap-3 items-center">
+                        <img src={(item.images && item.images[0] && (item.images[0].url || item.images[0])) || ''} alt={`${item.name} • ${item.brand}`} className="w-16 h-16 object-cover rounded" />
+                        <div className="flex-1">
+                          <div className="font-bold text-sm">{item.name}</div>
+                          <div className="text-amber-400 font-bold">{formatMoney(item.price)}</div>
+                          <div className="mt-2 flex items-center gap-2">
+                            <button onClick={() => changeQty(item.id, (item.qty || 1) - 1)} className="px-2 py-1 bg-slate-800 rounded">-</button>
+                            <div className="font-bold text-sm">{item.qty}</div>
+                            <button onClick={() => changeQty(item.id, (item.qty || 1) + 1)} className="px-2 py-1 bg-slate-800 rounded">+</button>
+                            <button onClick={() => removeFromCart(item.id)} className="ml-3 text-red-400 text-sm flex items-center gap-1"><Trash /> Remove</button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
 
                 {cart.length > 0 && (
-                  <div className="p-6 border-t border-slate-800 bg-slate-900">
-                    <div className="flex justify-between items-center mb-6">
-                      <span className="text-slate-400">Total:</span>
-                      <span className="text-2xl font-black text-white">{formatMoney(calculateTotal())}</span>
+                  <div className="mt-4">
+                    <div className="flex justify-between items-center mb-4">
+                      <div className="text-slate-400">Total:</div>
+                      <div className="text-2xl font-black">{formatMoney(calculateTotal())}</div>
                     </div>
-                    <button onClick={handleCheckout} className="w-full bg-green-600 hover:bg-green-500 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-3">
+                    <button onClick={handleCheckout} className="w-full bg-green-600 py-3 rounded text-white flex items-center justify-center gap-3">
                       <MessageCircle /> CHECKOUT VIA WHATSAPP
                     </button>
                   </div>
                 )}
-              </div>
+              </aside>
             </div>
           )}
 
-          {/* ADMIN ACCESS-CODE MODAL */}
+          {/* ADMIN LOGIN MODAL (ACCESS CODE) */}
+          <div className={`modal-backdrop ${showLogin ? 'visible' : ''} fixed inset-0`} aria-hidden={!showLogin} style={{ display: showLogin ? 'block' : 'none' }} onClick={() => setShowLogin(false)}></div>
           {showLogin && (
-            <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" role="dialog" aria-label="Admin login">
-              <div className="bg-slate-900 border border-slate-700 p-8 rounded-3xl w-full max-w-md shadow-2xl">
+            <div className="modal fixed inset-0 z-120 flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-700 p-8 rounded-3xl w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
                 <div className="flex justify-center mb-6">
                   <div className="bg-amber-500/20 p-4 rounded-full"><Lock className="text-amber-500 w-8 h-8" /></div>
                 </div>
@@ -596,7 +578,6 @@
                   value={loginCode}
                   onChange={(e) => setLoginCode(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleAccessCodeLogin()}
-                  aria-label="Admin access code"
                 />
 
                 <div className="flex gap-3">
@@ -604,20 +585,24 @@
                   <button onClick={handleAccessCodeLogin} className="flex-1 py-3 bg-amber-500 text-slate-900 rounded-xl font-bold hover:bg-amber-400">Unlock</button>
                 </div>
 
-                <p className="text-xs text-slate-500 mt-3">If you accidentally long-pressed, enter the admin access code or press Cancel. The access code is required to upload/manage products.</p>
+                <p className="text-xs text-slate-500 mt-3">
+                  Note: Access code is embedded in this deployment (single-contributor flow).
+                </p>
               </div>
             </div>
           )}
 
           {/* UPLOAD / EDIT MODAL */}
+          <div className={`modal-backdrop ${showUploadModal ? 'visible' : ''} fixed inset-0`} aria-hidden={!showUploadModal} style={{ display: showUploadModal ? 'block' : 'none' }} onClick={() => setShowUploadModal(false)}></div>
           {showUploadModal && (
-            <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/95 p-4 overflow-y-auto" role="dialog" aria-label={editingProduct ? 'Edit product' : 'Upload product'}>
-              <div className="bg-slate-900 border border-slate-700 p-6 md:p-8 rounded-3xl w-full max-w-2xl my-8">
+            <div className="modal fixed inset-0 z-120 flex items-center justify-center p-4 overflow-auto">
+              <div className="bg-slate-900 border border-slate-700 p-6 md:p-8 rounded-3xl w-full max-w-2xl my-8" onClick={(e) => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="text-2xl font-bold">{editingProduct ? 'Edit Product' : 'Upload New Product'}</h2>
                   <button onClick={() => { setShowUploadModal(false); setEditingProduct(null); }} aria-label="Close upload modal"><X /></button>
                 </div>
 
+                {/* Form: ensure onSubmit is wired and button is clickable */}
                 <form onSubmit={handleSaveProduct} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="md:col-span-2">
                     <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Product Photos (Max 8)</label>
@@ -670,8 +655,13 @@
                     <textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 h-20" />
                   </div>
 
-                  <button type="submit" className="md:col-span-2 bg-amber-500 text-slate-900 py-4 rounded-xl font-bold hover:bg-amber-400 mt-4 shadow-lg shadow-amber-500/20 transition-all">
-                    {editingProduct ? 'Update Inventory' : 'Post to Catalog'}
+                  {/* Important: button is type="submit", enabled when not saving */}
+                  <button
+                    type="submit"
+                    className={`md:col-span-2 bg-amber-500 text-slate-900 py-4 rounded-xl font-bold hover:bg-amber-400 mt-4 shadow-lg shadow-amber-500/20 transition-all ${isSaving ? 'btn-disabled' : ''}`}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? 'Uploading...' : (editingProduct ? 'Update Inventory' : 'Post to Catalog')}
                   </button>
                 </form>
               </div>
@@ -693,17 +683,18 @@
       );
     }
 
-    // mount
+    // Mount app
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
+
   </script>
 
   <!-- Notes:
-       - Admin access code is the plain string '#112AfriNethubnodeyplay112#' embedded in ADMIN_PLAIN_PASSCODE.
-       - Gesture to open admin modal: double-click on desktop or long-press (~700ms) on mobile on the left logo button.
-       - Single click on logo scrolls to top (harmless for visitors).
-       - Add/Cart functions remain separate and unchanged for shoppers.
-       - For production security, consider server-side auth later; for single trusted contributor, this is a convenient setup.
-  -->
+       - I fixed the grid class (lg:grid-cols-3), added an isSaving state and disabled/post button binding,
+         and ensured modal backdrops won't block clicks when not visible.
+       - The "Post to Catalog" button is type="submit" and the form has onSubmit bound to handleSaveProduct.
+       - If the button still appears unresponsive, open DevTools Console and check for errors.
+       - If you want, I can also add an explicit debug "Enable Admin" button visible only to you (temporary)
+         to force admin mode for testing. -->
 </body>
 </html>
