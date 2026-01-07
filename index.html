@@ -43,7 +43,7 @@
       apiKey: "AIzaSyDmzzR9iOp19RbM0uY19aKzJ9T3Nm5_6-k",
       authDomain: "afrinethub.firebaseapp.com",
       projectId: "afrinethub",
-      storageBucket: "afrinethub.firebasestorage.app",
+      storageBucket: "afrinethub.appspot.com",
       messagingSenderId: "313556528568",
       appId: "1:313556528568:web:f8b1cda91950bbe953734d",
       measurementId: "G-KCZD4HLCQ1"
@@ -351,7 +351,6 @@
       // ---------- Save product (requires isAdminActive) ----------
       const handleSaveProduct = async (e) => {
         if (e && e.preventDefault) e.preventDefault();
-        if (!formData.images || formData.images.length === 0) { alert('Please upload at least one image'); return; }
         if (!isAdminActive) { alert('Only active admin sessions can save products. Long-press the admin icon and enter the access code.'); return; }
 
         setIsSaving(true);
@@ -689,17 +688,5 @@
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
   </script>
-
-  <!--
-    Notes:
-    - Behavior now:
-      - Cart icon is always shown to visitors.
-      - Admin features are only visible when the session flag isAdminActive === true.
-      - To activate admin session: press-and-hold the cart icon (~700ms) -> Access Code modal opens -> enter code -> session becomes active and the Upload modal opens.
-      - isAdminAllowed (stored in localStorage) merely remembers the device is permitted; it no longer auto-opens admin UI on page load. You must long-press + enter the code to activate a session.
-    - Admin actions (save/delete) now check isAdminActive (session) — persistent localStorage alone is not sufficient to perform writes.
-    - If you'd like "forget this device" behavior, we can add a button that clears localStorage key 'afri_is_admin'.
-    - If you want the access code hidden, we can switch to hashed access-code (recommended) next.
-  -->
 </body>
 </html>
