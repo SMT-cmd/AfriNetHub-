@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>AFRINETHUB — Live</title>
+  <title>AFRINETHUB — Premium Deals</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛒</text></svg>">
 
   <!-- Tailwind CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -81,6 +82,8 @@
     const Upload = (p) => (<Icon {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" strokeLinecap="round" strokeLinejoin="round"/><path d="M17 8l-5-5-5 5M12 3v12" strokeLinecap="round" strokeLinejoin="round"/></Icon>);
     const Prev = (p) => (<Icon {...p}><path d="M15 6l-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" /></Icon>);
     const Next = (p) => (<Icon {...p}><path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" /></Icon>);
+    const Sun = (p) => (<Icon {...p}><circle cx="12" cy="12" r="5" /><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" strokeLinecap="round" strokeLinejoin="round" /></Icon>);
+    const Moon = (p) => (<Icon {...p}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" strokeLinecap="round" strokeLinejoin="round" /></Icon>);
 
     // ---------- constants & helpers ----------
     const LOCAL_STORAGE_CART_KEY = 'afri_cart_v1';
@@ -183,6 +186,19 @@
       // form
       const [formData, setFormData] = useState({ name:'', category:'Phones', brand:'', price:'', oldPrice:'', images:[], newFiles:[], description:'' });
       const [isSaving, setIsSaving] = useState(false);
+      const [imageUrlInput, setImageUrlInput] = useState('');
+      const [theme, setTheme] = useLocalStorageState('afri_theme', 'dark');
+
+      // Theme Effect
+      useEffect(() => {
+        if (theme === 'light') {
+          document.body.style.background = '#f8fafc'; // slate-50
+          document.body.style.color = '#0f1724';
+        } else {
+          document.body.style.background = '#0f1724';
+          document.body.style.color = '#e6eef8';
+        }
+      }, [theme]);
 
       // long-press refs/settings
       const longPressTimerRef = useRef(null);
@@ -326,6 +342,13 @@
       };
 
       // ---------- Image upload ----------
+      const handleAddImageUrl = () => {
+        if (!imageUrlInput) return;
+        if (formData.images.length >= 8) { alert('Maximum 8 images allowed'); return; }
+        setFormData(prev => ({ ...prev, images: [...prev.images, imageUrlInput] }));
+        setImageUrlInput('');
+      };
+
       const handleImageUpload = (e) => {
         const files = Array.from(e.target.files || []);
         if (files.length + formData.images.length > 8) { alert('Maximum 8 images allowed'); return; }
@@ -494,6 +517,10 @@
                   <button key={cat} onClick={()=>setActiveCategory(cat)} className={`text-sm px-3 py-1 rounded ${activeCategory===cat?'bg-amber-500 text-slate-900':'text-slate-400 hover:text-white'}`}>{cat}</button>
                 ))}
 
+                <button onClick={()=>setTheme(theme==='dark'?'light':'dark')} className="p-2 rounded hover:bg-slate-800 text-slate-400 hover:text-white" title="Toggle Theme">
+                  {theme==='dark' ? <Sun /> : <Moon />}
+                </button>
+
                 {isAdminActive && <button onClick={()=>setShowUploadModal(true)} className="bg-green-600 px-3 py-2 rounded text-white flex items-center gap-2"><Plus/> New</button>}
 
                 <button onClick={()=>setShowCart(true)} className="relative p-2 bg-slate-800 rounded">
@@ -627,6 +654,17 @@
                       )}
                     </div>
                     <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" multiple className="hidden" />
+                    
+                    <div className="flex gap-2 mt-2">
+                      <input 
+                        value={imageUrlInput} 
+                        onChange={e => setImageUrlInput(e.target.value)} 
+                        placeholder="Or paste image URL..." 
+                        className="flex-1 bg-slate-800 p-2 rounded text-sm"
+                        onKeyDown={e => { if(e.key === 'Enter') { e.preventDefault(); handleAddImageUrl(); } }}
+                      />
+                      <button type="button" onClick={handleAddImageUrl} className="bg-slate-700 px-4 py-2 rounded text-sm font-bold">Add URL</button>
+                    </div>
                   </div>
 
                   <div className="md:col-span-2">
@@ -677,6 +715,7 @@
               <div className="flex gap-4 justify-center mt-4">
                 <button className="p-2 bg-slate-800 rounded"><svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8A8.5 8.5 0 1 1 11.5 3"/></svg></button>
                 <button onClick={()=>window.open(`https://wa.me/${OFFICIAL_WHATSAPP}`,'_blank')} className="p-2 bg-slate-800 rounded text-green-400"><MessageCircle /></button>
+                <button onClick={()=>setShowLogin(true)} className="p-2 bg-slate-800 rounded text-amber-400" title="Admin Login"><Lock /></button>
               </div>
             </div>
           </footer>
