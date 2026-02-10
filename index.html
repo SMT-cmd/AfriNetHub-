@@ -317,6 +317,19 @@
         }
       }
 
+      // ---------- URL Admin Trigger ----------
+      useEffect(() => {
+        const checkAdminUrl = () => {
+          const href = window.location.href;
+          if (href.includes('admin') || href.includes('#admin') || href.includes('?admin')) {
+            if (!isAdminActive) setShowLogin(true);
+          }
+        };
+        checkAdminUrl();
+        window.addEventListener('hashchange', checkAdminUrl);
+        return () => window.removeEventListener('hashchange', checkAdminUrl);
+      }, [isAdminActive]);
+
       // ---------- Access code login ----------
       const handleAccessCodeLogin = () => {
         if (!loginCode || loginCode.trim() === '') { alert('Enter access code'); return; }
@@ -485,21 +498,10 @@
           <nav className="fixed w-full z-50 bg-slate-900/80 backdrop-blur border-b border-slate-800">
             <div className="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                {/* Cart logo is visible to visitors — long-press to open admin access */}
-                <button
-                  onPointerDown={startLongPress}
-                  onPointerUp={cancelLongPress}
-                  onPointerCancel={cancelLongPress}
-                  onPointerLeave={cancelLongPress}
-                  onTouchStart={startLongPress}
-                  onTouchEnd={cancelLongPress}
-                  onContextMenu={(e)=>e.preventDefault()}
-                  className={`p-2 rounded-lg ${isAdminActive ? 'bg-red-500' : 'bg-amber-400 text-slate-900'}`}
-                  aria-label="Admin (press & hold to open access)"
-                  title="Press and hold to open admin access"
-                >
+                {/* Cart logo is visible to visitors */}
+                <div className={`p-2 rounded-lg ${isAdminActive ? 'bg-red-500' : 'bg-amber-400 text-slate-900'}`}>
                   <ShoppingCart className="w-5 h-5" />
-                </button>
+                </div>
 
                 <div>
                   <div className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-amber-300 to-amber-100">AFRINETHUB</div>
@@ -715,7 +717,6 @@
               <div className="flex gap-4 justify-center mt-4">
                 <button className="p-2 bg-slate-800 rounded"><svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8A8.5 8.5 0 1 1 11.5 3"/></svg></button>
                 <button onClick={()=>window.open(`https://wa.me/${OFFICIAL_WHATSAPP}`,'_blank')} className="p-2 bg-slate-800 rounded text-green-400"><MessageCircle /></button>
-                <button onClick={()=>setShowLogin(true)} className="p-2 bg-slate-800 rounded text-amber-400" title="Admin Login"><Lock /></button>
               </div>
             </div>
           </footer>
