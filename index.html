@@ -11,16 +11,17 @@
 
   <style>
     html,body,#root { height: 100%; }
-    body { background: #0f1724; color: #e6eef8; font-family: Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial; }
+    /* Monochrome Theme: Black background, White text */
+    body { background: #000000; color: #ffffff; font-family: Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial; }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .animate-in { animation: fadeIn .18s ease-out; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: translateY(0) } }
     .btn-disabled { opacity: 0.6; pointer-events: none; cursor: not-allowed; }
-    .img-control { background: rgba(15,23,36,0.6); width:36px; height:36px; display:inline-flex; align-items:center; justify-content:center; border-radius:9999px; color:#fff; transition:background .15s; }
-    .img-control:hover { background: rgba(255,255,255,0.12); }
+    .img-control { background: rgba(0,0,0,0.8); width:36px; height:36px; display:inline-flex; align-items:center; justify-content:center; border-radius:9999px; color:#fff; transition:background .15s; border: 1px solid rgba(255,255,255,0.2); }
+    .img-control:hover { background: rgba(255,255,255,0.2); }
     .img-indicators { gap:6px; display:inline-flex; align-items:center; }
-    .img-indicators button { width:8px; height:8px; border-radius:9999px; background: rgba(148,163,184,0.25); border: none; padding:0; }
-    .img-indicators button.active { background:#f59e0b; }
+    .img-indicators button { width:8px; height:8px; border-radius:9999px; background: rgba(255,255,255,0.3); border: none; padding:0; }
+    .img-indicators button.active { background:#ffffff; }
   </style>
 </head>
 <body>
@@ -116,11 +117,11 @@
       useEffect(() => { if (idx >= urls.length) setIdx(0); }, [urls.length]);
 
       return (
-        <article className="group bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 relative flex flex-col">
-          <div className="h-64 bg-slate-800 relative overflow-hidden">
+        <article className="group bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800 relative flex flex-col">
+          <div className="h-64 bg-black relative overflow-hidden">
             <img src={urls[idx]} alt={`${product.name} • ${product.brand}`} loading="lazy" className="w-full h-full object-cover transition-transform group-hover:scale-105" />
             <div className="absolute top-4 left-4">
-              <span className="bg-slate-950/80 px-3 py-1 rounded-full text-xs font-bold uppercase">{product.category}</span>
+              <span className="bg-black/80 text-white border border-white/20 px-3 py-1 rounded-full text-xs font-bold uppercase">{product.category}</span>
             </div>
 
             {urls.length > 1 && (
@@ -137,22 +138,22 @@
 
           <div className="p-6 flex flex-col flex-1">
             <h3 className="text-xl font-bold mb-1">{product.name}</h3>
-            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">{product.brand}</p>
-            <p className="text-slate-400 text-sm mb-4 italic line-clamp-1">"{product.description}"</p>
+            <p className="text-neutral-500 text-xs font-bold uppercase tracking-widest mb-2">{product.brand}</p>
+            <p className="text-neutral-400 text-sm mb-4 italic line-clamp-1">"{product.description}"</p>
 
             <div className="flex items-center justify-between mt-auto">
               <div>
-                {product.oldPrice > product.price && <div className="text-xs text-slate-500 line-through">{formatMoney(product.oldPrice)}</div>}
-                <div className="text-2xl font-black text-amber-400">{formatMoney(product.price)}</div>
+                {product.oldPrice > product.price && <div className="text-xs text-neutral-500 line-through">{formatMoney(product.oldPrice)}</div>}
+                <div className="text-2xl font-black text-white">{formatMoney(product.price)}</div>
               </div>
 
               {isAdmin ? (
                 <div className="flex gap-2">
-                  <button onClick={() => onEdit(product)} className="p-2 bg-slate-800 rounded text-blue-400"><Edit /></button>
-                  <button onClick={() => onDelete(product.id)} className="p-2 bg-slate-800 rounded text-red-400"><Trash /></button>
+                  <button onClick={() => onEdit(product)} className="p-2 bg-neutral-800 rounded text-white border border-white/20 hover:bg-neutral-700"><Edit /></button>
+                  <button onClick={() => onDelete(product.id)} className="p-2 bg-neutral-800 rounded text-red-400 border border-white/20 hover:bg-neutral-700"><Trash /></button>
                 </div>
               ) : (
-                <button onClick={() => onAddToCart(product)} className="flex items-center gap-2 bg-amber-400 text-slate-900 px-4 py-2 rounded font-bold">
+                <button onClick={() => onAddToCart(product)} className="flex items-center gap-2 bg-white text-black px-4 py-2 rounded font-bold hover:bg-neutral-200">
                   <ShoppingCart /> Add to Cart
                 </button>
               )}
@@ -189,20 +190,14 @@
       const [imageUrlInput, setImageUrlInput] = useState('');
       const [theme, setTheme] = useLocalStorageState('afri_theme', 'dark');
 
-      // Theme Effect
+      // Theme Effect - Enforced Monochrome
       useEffect(() => {
-        if (theme === 'light') {
-          document.body.style.background = '#f8fafc'; // slate-50
-          document.body.style.color = '#0f1724';
-        } else {
-          document.body.style.background = '#0f1724';
-          document.body.style.color = '#e6eef8';
-        }
-      }, [theme]);
+        // Force Black theme regardless of previous preference
+        document.body.style.background = '#000000';
+        document.body.style.color = '#ffffff';
+      }, []);
 
-      // long-press refs/settings
-      const longPressTimerRef = useRef(null);
-      const longPressDuration = 700; // ms to trigger long-press
+
 
       // local defaults (used if Firestore not available)
       const localDefaults = [
@@ -253,10 +248,7 @@
         }
       }, [editingProduct]);
 
-      // cleanup long-press timer on unmount
-      useEffect(() => {
-        return () => { if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current); };
-      }, []);
+
 
       // CART helpers
       const calculateTotal = () => cart.reduce((sum, item) => sum + (Number(item.price) || 0) * (item.qty || 1), 0);
@@ -289,33 +281,7 @@
         window.open(`https://wa.me/${OFFICIAL_WHATSAPP}?text=${encodeURIComponent(message)}`, '_blank');
       };
 
-      // ---------- long-press handlers ----------
-      function startLongPress(e) {
-        // Prevent default to avoid context menu on long touch
-        if (e && e.preventDefault) e.preventDefault();
-        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
-        longPressTimerRef.current = setTimeout(() => {
-          longPressTimerRef.current = null;
-          handleLongPress();
-        }, longPressDuration);
-      }
 
-      function cancelLongPress() {
-        if (longPressTimerRef.current) {
-          clearTimeout(longPressTimerRef.current);
-          longPressTimerRef.current = null;
-        }
-      }
-
-      function handleLongPress() {
-        // If session already active, open admin panel directly
-        if (isAdminActive) {
-          setShowUploadModal(true);
-        } else {
-          // require access code (even if device is allowed previously)
-          setShowLogin(true);
-        }
-      }
 
       // ---------- URL Admin Trigger ----------
       useEffect(() => {
@@ -387,11 +353,12 @@
       // ---------- Save product (requires isAdminActive) ----------
       const handleSaveProduct = async (e) => {
         if (e && e.preventDefault) e.preventDefault();
-        if (!isAdminActive) { alert('Only active admin sessions can save products. Long-press the admin icon and enter the access code.'); return; }
+        if (!isAdminActive) { alert('Only active admin sessions can save products.'); return; }
 
         setIsSaving(true);
         try {
           if (db && storage) {
+            // ... Firebase save logic ...
             let docRef;
             if (editingProduct && editingProduct.id) docRef = db.collection('products').doc(String(editingProduct.id));
             else docRef = db.collection('products').doc();
@@ -418,30 +385,52 @@
               category: formData.category,
               brand: formData.brand,
               price: Number(formData.price),
-              oldPrice: formData.oldPrice ? Number(formData.oldPrice) : 0,
+              oldPrice: Number(formData.oldPrice),
+              description: formData.description,
               images: finalImages,
-              description: formData.description || '',
               updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             };
             if (!editingProduct) payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
 
             await docRef.set(payload, { merge: true });
-            alert('Product saved to catalog.');
           } else {
-            const normalized = { ...formData, id: editingProduct ? editingProduct.id : Date.now(), price: Number(formData.price), oldPrice: formData.oldPrice ? Number(formData.oldPrice) : 0 };
-            if (editingProduct) setProducts(prev => prev.map(p => p.id === editingProduct.id ? normalized : p));
-            else setProducts(prev => [normalized, ...prev]);
-            alert('Product saved locally (Firestore not configured).');
+            // LocalStorage fallback - CAUTION: Quota limits
+            const existing = (formData.images || []).filter(i => typeof i === 'string'); // Keep existing strings (URLs/Base64)
+            // Note: formData.images already contains base64 for newFiles from handleImageUpload
+            // We just need to make sure we don't duplicate or lose them.
+            
+            // If the user uploaded a file, it is already in formData.images as a base64 string.
+            // But we should verify if we need to do anything else.
+            // The handleImageUpload puts reader.result (base64) into images.
+            // So formData.images has everything we need for local storage.
+            
+            // Check size estimate
+            const payloadStr = JSON.stringify(formData.images);
+            if (payloadStr.length > 4000000) { // ~4MB warning
+               alert("Warning: Images are very large. Local storage might be full. Use URL images if possible.");
+            }
+
+            const newProd = {
+              ...formData,
+              id: editingProduct ? editingProduct.id : Date.now(),
+              price: Number(formData.price),
+              oldPrice: Number(formData.oldPrice),
+              newFiles: [] // clear file objects, keep base64 images
+            };
+
+            setProducts(prev => {
+              if (editingProduct) return prev.map(p => p.id === newProd.id ? newProd : p);
+              return [newProd, ...prev];
+            });
+            alert('Saved locally (Note: Without Firebase, images are stored in browser cache and may disappear if cache is cleared).');
           }
 
           setShowUploadModal(false);
           setEditingProduct(null);
           setFormData({ name:'', category:'Phones', brand:'', price:'', oldPrice:'', images:[], newFiles:[], description:'' });
         } catch (err) {
-          console.error('Save product error', err);
-          let msg = err && err.message ? err.message : String(err);
-          if (msg.toLowerCase().includes('permission')) msg = 'Permission denied — check Firestore/Storage rules.';
-          alert('Failed to save product: ' + msg);
+          console.error(err);
+          alert('Error saving product: ' + err.message);
         } finally {
           setIsSaving(false);
         }
@@ -449,7 +438,7 @@
 
       // ---------- Delete product (requires isAdminActive) ----------
       const handleDeleteProduct = async (id) => {
-        if (!isAdminActive) { alert('Only active admin sessions can delete products. Long-press admin icon and enter the access code.'); return; }
+        if (!isAdminActive) { alert('Only active admin sessions can delete products. Use the admin URL to log in.'); return; }
         if (!confirm('Delete this item?')) return;
 
         try {
@@ -495,20 +484,20 @@
       return (
         <div className="min-h-screen">
           {/* NAV */}
-          <nav className="fixed w-full z-50 bg-slate-900/80 backdrop-blur border-b border-slate-800">
+          <nav className="fixed w-full z-50 bg-black/80 backdrop-blur border-b border-neutral-800">
             <div className="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 {/* Cart logo is visible to visitors */}
-                <div className={`p-2 rounded-lg ${isAdminActive ? 'bg-red-500' : 'bg-amber-400 text-slate-900'}`}>
+                <div className={`p-2 rounded-lg ${isAdminActive ? 'bg-white text-black' : 'bg-white text-black'}`}>
                   <ShoppingCart className="w-5 h-5" />
                 </div>
 
                 <div>
-                  <div className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-amber-300 to-amber-100">AFRINETHUB</div>
+                  <div className="text-2xl font-black text-white tracking-tight">AFRINETHUB</div>
                   <div className="flex items-center gap-2">
-                    {isAdminActive && <div className="text-xs text-red-400">ADMIN ACTIVE</div>}
+                    {isAdminActive && <div className="text-[10px] font-bold border border-white px-1 text-white">ADMIN</div>}
                     {isAdminActive && (
-                      <button onClick={handleSignOut} className="text-xs text-slate-400 hover:text-white">Sign out</button>
+                      <button onClick={handleSignOut} className="text-xs text-neutral-400 hover:text-white">Sign out</button>
                     )}
                   </div>
                 </div>
@@ -516,22 +505,20 @@
 
               <div className="hidden md:flex items-center gap-4">
                 {['All','Cars','Phones','Laptops','Tablets','Watches'].map(cat => (
-                  <button key={cat} onClick={()=>setActiveCategory(cat)} className={`text-sm px-3 py-1 rounded ${activeCategory===cat?'bg-amber-500 text-slate-900':'text-slate-400 hover:text-white'}`}>{cat}</button>
+                  <button key={cat} onClick={()=>setActiveCategory(cat)} className={`text-sm px-3 py-1 rounded font-bold ${activeCategory===cat?'bg-white text-black':'text-neutral-400 hover:text-white'}`}>{cat}</button>
                 ))}
 
-                <button onClick={()=>setTheme(theme==='dark'?'light':'dark')} className="p-2 rounded hover:bg-slate-800 text-slate-400 hover:text-white" title="Toggle Theme">
-                  {theme==='dark' ? <Sun /> : <Moon />}
-                </button>
+                {/* Theme toggle removed as we enforce Monochrome */}
 
-                {isAdminActive && <button onClick={()=>setShowUploadModal(true)} className="bg-green-600 px-3 py-2 rounded text-white flex items-center gap-2"><Plus/> New</button>}
+                {isAdminActive && <button onClick={()=>setShowUploadModal(true)} className="bg-white text-black px-3 py-2 rounded flex items-center gap-2 font-bold"><Plus/> New</button>}
 
-                <button onClick={()=>setShowCart(true)} className="relative p-2 bg-slate-800 rounded">
+                <button onClick={()=>setShowCart(true)} className="relative p-2 bg-neutral-800 rounded text-white hover:bg-neutral-700">
                   <ShoppingCart />
-                  {cart.length > 0 && (<span className="absolute -top-2 -right-2 bg-amber-400 text-slate-900 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center border-2 border-slate-900">{cart.reduce((s,i)=>s+(i.qty||1),0)}</span>)}
+                  {cart.length > 0 && (<span className="absolute -top-2 -right-2 bg-white text-black w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center border-2 border-black">{cart.reduce((s,i)=>s+(i.qty||1),0)}</span>)}
                 </button>
               </div>
 
-              <button className="md:hidden p-2" onClick={()=>setIsMenuOpen(!isMenuOpen)} aria-label="Toggle">
+              <button className="md:hidden p-2 text-white" onClick={()=>setIsMenuOpen(!isMenuOpen)} aria-label="Toggle">
                 {isMenuOpen ? <X /> : <Menu />}
               </button>
             </div>
@@ -540,25 +527,25 @@
           {/* HERO */}
           <header className="pt-28 pb-10 px-4">
             <div className="max-w-7xl mx-auto">
-              <div className="rounded-2xl p-8 md:p-16 bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700">
-                <h1 className="text-3xl md:text-5xl font-bold">Direct Sales from <span className="text-amber-400">AfriNethub</span> Global</h1>
-                <p className="text-slate-400 mt-4">Premium Autos & latest tech. Quality you can trust.</p>
-                {isAdminActive && <button onClick={()=>setShowUploadModal(true)} className="mt-6 bg-amber-400 text-slate-900 px-4 py-2 rounded">Quick Upload Item</button>}
+              <div className="rounded-2xl p-8 md:p-16 bg-neutral-900 border border-neutral-800">
+                <h1 className="text-3xl md:text-5xl font-bold text-white">Direct Sales from <span className="text-white underline decoration-wavy decoration-neutral-500">AfriNethub</span> Global</h1>
+                <p className="text-neutral-400 mt-4">Premium Autos & latest tech. Quality you can trust.</p>
+                {isAdminActive && <button onClick={()=>setShowUploadModal(true)} className="mt-6 bg-white text-black px-4 py-2 rounded font-bold hover:bg-neutral-200">Quick Upload Item</button>}
               </div>
             </div>
           </header>
 
           {/* SEARCH / CATS */}
-          <section className="sticky top-20 z-30 bg-slate-950/80 backdrop-blur-md py-4 border-b border-slate-800">
+          <section className="sticky top-20 z-30 bg-black/80 backdrop-blur-md py-4 border-b border-neutral-800">
             <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row gap-4 items-center">
               <div className="relative w-full md:w-96">
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><Search /></div>
-                <input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="Search items, brands or description..." className="w-full bg-slate-900 border border-slate-700 rounded-lg py-2 pl-10 pr-4" />
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400"><Search /></div>
+                <input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="Search items, brands or description..." className="w-full bg-neutral-900 border border-neutral-700 rounded-lg py-2 pl-10 pr-4 text-white placeholder-neutral-500" />
               </div>
 
               <div className="flex gap-2 overflow-x-auto w-full no-scrollbar">
                 {['All','Cars','Phones','Laptops','Tablets','Watches'].map(cat => (
-                  <button key={cat} onClick={()=>setActiveCategory(cat)} className={`px-4 py-1.5 rounded-full text-xs ${activeCategory===cat?'bg-amber-500 text-slate-900 font-bold':'bg-slate-900 border border-slate-800 text-slate-400'}`}>{cat}</button>
+                  <button key={cat} onClick={()=>setActiveCategory(cat)} className={`px-4 py-1.5 rounded-full text-xs font-bold ${activeCategory===cat?'bg-white text-black':'bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white'}`}>{cat}</button>
                 ))}
               </div>
             </div>
@@ -577,25 +564,25 @@
           {showCart && (
             <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-label="Cart">
               <div className="absolute inset-0 bg-black/60" onClick={()=>setShowCart(false)} aria-hidden="true"></div>
-              <aside className="relative w-full max-w-md h-full bg-slate-900 border-l border-slate-800 p-6 flex flex-col">
+              <aside className="relative w-full max-w-md h-full bg-neutral-900 border-l border-neutral-800 p-6 flex flex-col">
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-xl font-bold flex items-center gap-2"><ShoppingCart /> YOUR CART</h2>
                   <button onClick={()=>setShowCart(false)} aria-label="Close"><X /></button>
                 </div>
                 <div className="flex-1 overflow-y-auto py-2">
                   {cart.length === 0 ? (
-                    <div className="text-center text-slate-500 py-12"><div className="mb-4"><ShoppingCart className="w-10 h-10" /></div>Your cart is empty</div>
+                    <div className="text-center text-neutral-500 py-12"><div className="mb-4"><ShoppingCart className="w-10 h-10" /></div>Your cart is empty</div>
                   ) : cart.map(item => (
-                    <div key={item.id} className="bg-slate-800/50 p-4 rounded-xl mb-3 flex gap-3 items-center">
+                    <div key={item.id} className="bg-black border border-white/10 p-4 rounded-xl mb-3 flex gap-3 items-center">
                       <img src={(item.images && item.images[0] && (item.images[0].url || item.images[0])) || ''} alt={`${item.name} • ${item.brand}`} className="w-16 h-16 object-cover rounded" />
                       <div className="flex-1">
                         <div className="font-bold text-sm">{item.name}</div>
-                        <div className="text-amber-400 font-bold">{formatMoney(item.price)}</div>
+                        <div className="text-white font-bold">{formatMoney(item.price)}</div>
                         <div className="mt-2 flex items-center gap-2">
-                          <button onClick={()=>changeQty(item.id,(item.qty||1)-1)} className="px-2 py-1 bg-slate-800 rounded">-</button>
+                          <button onClick={()=>changeQty(item.id,(item.qty||1)-1)} className="px-2 py-1 bg-neutral-800 rounded border border-white/10">-</button>
                           <div className="font-bold text-sm">{item.qty}</div>
-                          <button onClick={()=>changeQty(item.id,(item.qty||1)+1)} className="px-2 py-1 bg-slate-800 rounded">+</button>
-                          <button onClick={()=>removeFromCart(item.id)} className="ml-3 text-red-400 text-sm flex items-center gap-1"><Trash /> Remove</button>
+                          <button onClick={()=>changeQty(item.id,(item.qty||1)+1)} className="px-2 py-1 bg-neutral-800 rounded border border-white/10">+</button>
+                          <button onClick={()=>removeFromCart(item.id)} className="ml-3 text-neutral-400 text-sm flex items-center gap-1 hover:text-white"><Trash /> Remove</button>
                         </div>
                       </div>
                     </div>
@@ -603,26 +590,26 @@
                 </div>
                 {cart.length > 0 && (
                   <div className="mt-4">
-                    <div className="flex justify-between items-center mb-4"><div className="text-slate-400">Total:</div><div className="text-2xl font-black">{formatMoney(calculateTotal())}</div></div>
-                    <button onClick={handleCheckout} className="w-full bg-green-600 py-3 rounded text-white flex items-center justify-center gap-3"><MessageCircle /> CHECKOUT VIA WHATSAPP</button>
+                    <div className="flex justify-between items-center mb-4"><div className="text-neutral-400">Total:</div><div className="text-2xl font-black">{formatMoney(calculateTotal())}</div></div>
+                    <button onClick={handleCheckout} className="w-full bg-white text-black font-bold py-3 rounded flex items-center justify-center gap-3 hover:bg-neutral-200"><MessageCircle /> CHECKOUT VIA WHATSAPP</button>
                   </div>
                 )}
               </aside>
             </div>
           )}
 
-          {/* ADMIN LOGIN modal (shown after long-press) */}
+          {/* ADMIN LOGIN modal */}
           {showLogin && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={() => setShowLogin(false)}>
-              <div className="bg-slate-900 p-6 rounded-2xl border border-slate-700 w-full max-w-md" onClick={(e)=>e.stopPropagation()}>
-                <div className="flex justify-center mb-4"><Lock className="w-8 h-8 text-amber-400" /></div>
+              <div className="bg-neutral-900 p-6 rounded-2xl border border-neutral-700 w-full max-w-md" onClick={(e)=>e.stopPropagation()}>
+                <div className="flex justify-center mb-4"><Lock className="w-8 h-8 text-white" /></div>
                 <h3 className="text-xl font-bold text-center mb-4">Admin Access</h3>
-                <input type="password" value={loginCode} onChange={e=>setLoginCode(e.target.value)} onKeyDown={e=>e.key==='Enter' && handleAccessCodeLogin()} placeholder="Enter access code" className="w-full bg-slate-800 p-3 rounded mb-4" />
+                <input type="password" value={loginCode} onChange={e=>setLoginCode(e.target.value)} onKeyDown={e=>e.key==='Enter' && handleAccessCodeLogin()} placeholder="Enter access code" className="w-full bg-black border border-neutral-700 p-3 rounded mb-4 text-white" />
                 <div className="flex gap-3">
-                  <button onClick={()=>setShowLogin(false)} className="flex-1 text-slate-400">Cancel</button>
-                  <button onClick={handleAccessCodeLogin} className="flex-1 bg-amber-400 text-slate-900 rounded">Unlock</button>
+                  <button onClick={()=>setShowLogin(false)} className="flex-1 text-neutral-400 hover:text-white">Cancel</button>
+                  <button onClick={handleAccessCodeLogin} className="flex-1 bg-white text-black font-bold rounded hover:bg-neutral-200">Unlock</button>
                 </div>
-                <p className="text-xs text-slate-500 mt-3">Press-and-hold the cart icon to open this access dialog.</p>
+                <p className="text-xs text-neutral-500 mt-3 text-center">Use URL trigger to open this dialog.</p>
               </div>
             </div>
           )}
@@ -630,27 +617,27 @@
           {/* UPLOAD / EDIT modal */}
           {showUploadModal && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 overflow-auto">
-              <div className="bg-slate-900 p-6 rounded-2xl w-full max-w-2xl border border-slate-700" onClick={(e)=>e.stopPropagation()}>
+              <div className="bg-neutral-900 p-6 rounded-2xl w-full max-w-2xl border border-neutral-700" onClick={(e)=>e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-xl font-bold">{editingProduct ? 'Edit Product' : 'Upload New Product'}</h3>
                   <div className="flex items-center gap-2">
                     <button onClick={() => { setShowUploadModal(false); setEditingProduct(null); }} aria-label="Close"><X /></button>
-                    <button onClick={handleSignOut} className="text-xs text-slate-400">Sign out</button>
+                    <button onClick={handleSignOut} className="text-xs text-neutral-400 hover:text-white">Sign out</button>
                   </div>
                 </div>
 
                 <form onSubmit={handleSaveProduct} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="md:col-span-2">
-                    <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">Product Photos (Max 8)</label>
+                    <label className="text-xs font-bold text-neutral-400 uppercase mb-2 block">Product Photos (Max 8)</label>
                     <div className="grid grid-cols-4 gap-2 mb-2">
                       {formData.images.map((img, idx) => (
-                        <div key={idx} className="aspect-square relative rounded overflow-hidden border">
+                        <div key={idx} className="aspect-square relative rounded overflow-hidden border border-neutral-700">
                           <img src={typeof img === 'string' ? img : (img.url || '')} alt={`Preview ${idx+1}`} className="w-full h-full object-cover" />
-                          <button type="button" onClick={()=>removeImage(idx)} className="absolute top-1 right-1 bg-red-500 p-1 rounded text-white"><X className="w-3 h-3" /></button>
+                          <button type="button" onClick={()=>removeImage(idx)} className="absolute top-1 right-1 bg-neutral-900/80 p-1 rounded text-white hover:bg-red-600"><X className="w-3 h-3" /></button>
                         </div>
                       ))}
                       {formData.images.length < 8 && (
-                        <button type="button" onClick={()=>fileInputRef.current.click()} className="aspect-square flex items-center justify-center border-2 border-dashed rounded">
+                        <button type="button" onClick={()=>fileInputRef.current.click()} className="aspect-square flex items-center justify-center border-2 border-dashed border-neutral-700 rounded text-neutral-400 hover:text-white hover:border-white">
                           <Upload /> <span className="text-xs ml-2">Add</span>
                         </button>
                       )}
@@ -662,46 +649,46 @@
                         value={imageUrlInput} 
                         onChange={e => setImageUrlInput(e.target.value)} 
                         placeholder="Or paste image URL..." 
-                        className="flex-1 bg-slate-800 p-2 rounded text-sm"
+                        className="flex-1 bg-black border border-neutral-700 p-2 rounded text-sm text-white"
                         onKeyDown={e => { if(e.key === 'Enter') { e.preventDefault(); handleAddImageUrl(); } }}
                       />
-                      <button type="button" onClick={handleAddImageUrl} className="bg-slate-700 px-4 py-2 rounded text-sm font-bold">Add URL</button>
+                      <button type="button" onClick={handleAddImageUrl} className="bg-neutral-800 px-4 py-2 rounded text-sm font-bold text-white border border-neutral-700 hover:bg-neutral-700">Add URL</button>
                     </div>
                   </div>
 
                   <div className="md:col-span-2">
-                    <label className="text-xs text-slate-400 uppercase block mb-1">Product Name</label>
-                    <input required value={formData.name} onChange={e=>setFormData({...formData,name:e.target.value})} className="w-full bg-slate-800 p-3 rounded" placeholder="e.g. iPhone 16 Pro Max" />
+                    <label className="text-xs text-neutral-400 uppercase block mb-1">Product Name</label>
+                    <input required value={formData.name} onChange={e=>setFormData({...formData,name:e.target.value})} className="w-full bg-black border border-neutral-700 p-3 rounded text-white" placeholder="e.g. iPhone 16 Pro Max" />
                   </div>
 
                   <div>
-                    <label className="text-xs text-slate-400 uppercase block mb-1">Category</label>
-                    <select value={formData.category} onChange={e=>setFormData({...formData,category:e.target.value})} className="w-full bg-slate-800 p-3 rounded">
+                    <label className="text-xs text-neutral-400 uppercase block mb-1">Category</label>
+                    <select value={formData.category} onChange={e=>setFormData({...formData,category:e.target.value})} className="w-full bg-black border border-neutral-700 p-3 rounded text-white">
                       {['Cars','Phones','Laptops','Tablets','Watches'].map(c=><option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
 
                   <div>
-                    <label className="text-xs text-slate-400 uppercase block mb-1">Brand</label>
-                    <input required value={formData.brand} onChange={e=>setFormData({...formData,brand:e.target.value})} className="w-full bg-slate-800 p-3 rounded" placeholder="e.g. Apple" />
+                    <label className="text-xs text-neutral-400 uppercase block mb-1">Brand</label>
+                    <input required value={formData.brand} onChange={e=>setFormData({...formData,brand:e.target.value})} className="w-full bg-black border border-neutral-700 p-3 rounded text-white" placeholder="e.g. Apple" />
                   </div>
 
                   <div>
-                    <label className="text-xs text-slate-400 uppercase block mb-1">Selling Price ({NAIRA})</label>
-                    <input required type="number" value={formData.price} onChange={e=>setFormData({...formData,price:e.target.value})} className="w-full bg-slate-800 p-3 rounded" />
+                    <label className="text-xs text-neutral-400 uppercase block mb-1">Selling Price ({NAIRA})</label>
+                    <input required type="number" value={formData.price} onChange={e=>setFormData({...formData,price:e.target.value})} className="w-full bg-black border border-neutral-700 p-3 rounded text-white" />
                   </div>
 
                   <div>
-                    <label className="text-xs text-slate-400 uppercase block mb-1">Old Price (optional)</label>
-                    <input type="number" value={formData.oldPrice} onChange={e=>setFormData({...formData,oldPrice:e.target.value})} className="w-full bg-slate-800 p-3 rounded" />
+                    <label className="text-xs text-neutral-400 uppercase block mb-1">Old Price (optional)</label>
+                    <input type="number" value={formData.oldPrice} onChange={e=>setFormData({...formData,oldPrice:e.target.value})} className="w-full bg-black border border-neutral-700 p-3 rounded text-white" />
                   </div>
 
                   <div className="md:col-span-2">
-                    <label className="text-xs text-slate-400 uppercase block mb-1">Description</label>
-                    <textarea value={formData.description} onChange={e=>setFormData({...formData,description:e.target.value})} className="w-full bg-slate-800 p-3 rounded h-24"></textarea>
+                    <label className="text-xs text-neutral-400 uppercase block mb-1">Description</label>
+                    <textarea value={formData.description} onChange={e=>setFormData({...formData,description:e.target.value})} className="w-full bg-black border border-neutral-700 p-3 rounded h-24 text-white"></textarea>
                   </div>
 
-                  <button type="submit" className={`md:col-span-2 bg-amber-400 text-slate-900 py-3 rounded font-bold ${isSaving ? 'btn-disabled' : ''}`} disabled={isSaving}>
+                  <button type="submit" className={`md:col-span-2 bg-white text-black py-3 rounded font-bold hover:bg-neutral-200 ${isSaving ? 'btn-disabled' : ''}`} disabled={isSaving}>
                     {isSaving ? 'Posting...' : (editingProduct ? 'Update Inventory' : 'Post to Catalog')}
                   </button>
                 </form>
@@ -710,13 +697,13 @@
           )}
 
           {/* FOOTER */}
-          <footer className="bg-slate-900 border-t border-slate-800 py-12 mt-12">
+          <footer className="bg-neutral-900 border-t border-neutral-800 py-12 mt-12">
             <div className="max-w-7xl mx-auto px-4 text-center">
-              <div className="text-2xl font-bold">AFRINETHUB GLOBAL</div>
-              <div className="text-slate-400 mt-2">Direct High-End Deals • Based in Nigeria</div>
+              <div className="text-2xl font-black text-white">AFRINETHUB GLOBAL</div>
+              <div className="text-neutral-400 mt-2">Direct High-End Deals • Based in Nigeria</div>
               <div className="flex gap-4 justify-center mt-4">
-                <button className="p-2 bg-slate-800 rounded"><svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8A8.5 8.5 0 1 1 11.5 3"/></svg></button>
-                <button onClick={()=>window.open(`https://wa.me/${OFFICIAL_WHATSAPP}`,'_blank')} className="p-2 bg-slate-800 rounded text-green-400"><MessageCircle /></button>
+                <button className="p-2 bg-neutral-800 rounded text-white hover:bg-neutral-700"><svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8A8.5 8.5 0 1 1 11.5 3"/></svg></button>
+                <button onClick={()=>window.open(`https://wa.me/${OFFICIAL_WHATSAPP}`,'_blank')} className="p-2 bg-neutral-800 rounded text-white hover:bg-neutral-700"><MessageCircle /></button>
               </div>
             </div>
           </footer>
