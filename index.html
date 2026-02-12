@@ -56,7 +56,8 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useMemo } = React;
 
-    // ---------- FIREBASE CONFIG ----------
+    // ---------- STORAGE CONFIG ----------
+    // 1. Firebase (Existing)
     const firebaseConfig = {
       apiKey: "AIzaSyDmzzR9iOp19RbM0uY19aKzJ9T3Nm5_6-k",
       authDomain: "afrinethub.firebaseapp.com",
@@ -65,6 +66,16 @@
       messagingSenderId: "313556528568",
       appId: "1:313556528568:web:f8b1cda91950bbe953734d",
       measurementId: "G-KCZD4HLCQ1"
+    };
+
+    // 2. Cloudinary (Recommended Alternative for Images)
+    // To use Cloudinary: 
+    // - Sign up at Cloudinary.com
+    // - Get your 'cloudName' from the dashboard
+    // - Create an 'Unsigned Upload Preset' in Settings > Upload
+    const cloudinaryConfig = {
+      cloudName: "dw8q1kfgn", 
+      uploadPreset: "afrinet_preset" // IMPORTANT: You must create this 'Unsigned' preset in Cloudinary Settings > Upload
     };
 
     let db = null;
@@ -109,6 +120,13 @@
     const ADMIN_PLAIN_PASSCODE = '#112AfriNethubnodeyplay112#'; // plain passcode per request
 
     const formatMoney = (amount) => NAIRA + Number(amount || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+
+    const withTimeout = (promise, ms = 8000) => {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Operation timed out. Please check your internet or Firebase configuration.')), ms))
+      ]);
+    };
 
     const useLocalStorageState = (key, initial) => {
       const [state, setState] = useState(() => {
@@ -388,73 +406,102 @@
         if (!isAdminActive) { alert('Only active admin sessions can save products.'); return; }
 
         setIsSaving(true);
+        let firebaseFailed = false;
+
         try {
-          if (db && storage) {
-            // ... Firebase save logic ...
-            let docRef;
-            if (editingProduct && editingProduct.id) docRef = db.collection('products').doc(String(editingProduct.id));
-            else docRef = db.collection('products').doc();
+          const uploaded = [];
+          
+          // --- STEP 1: UPLOAD IMAGES ---
+          // Try Cloudinary first if configured (it's more reliable for images)
+          if (cloudinaryConfig.cloudName && cloudinaryConfig.uploadPreset && formData.newFiles.length > 0) {
+            try {
+              for (const file of formData.newFiles) {
+                const url = `https://api.cloudinary.com/v1_1/${cloudinaryConfig.cloudName}/image/upload`;
+                const fd = new FormData();
+                fd.append('upload_preset', cloudinaryConfig.uploadPreset);
+                fd.append('file', file);
 
-            const uploaded = [];
-            for (let i = 0; i < (formData.newFiles || []).length; i++) {
-              const file = formData.newFiles[i];
-              const path = `products/${docRef.id}/${Date.now()}_${file.name}`;
-              const ref = storage.ref().child(path);
-              const snap = await ref.put(file);
-              const url = await snap.ref.getDownloadURL();
-              uploaded.push({ path, url });
+                const resp = await fetch(url, { method: 'POST', body: fd });
+                const data = await resp.json();
+                if (data.secure_url) {
+                  uploaded.push({ path: data.public_id, url: data.secure_url });
+                } else {
+                  throw new Error(data.error?.message || 'Cloudinary upload failed');
+                }
+              }
+            } catch (clErr) {
+              console.warn('Cloudinary upload failed, trying Firebase...', clErr);
             }
+          }
 
-            const existingRemote = (formData.images || []).filter(i => {
-              if (typeof i === 'string') return i.startsWith('http');
-              return i && i.url;
-            }).map(i => (typeof i === 'string' ? { path: null, url: i } : { path: i.path || null, url: i.url }));
+          // If Cloudinary didn't run or failed, try Firebase Storage
+          if (uploaded.length === 0 && storage && formData.newFiles.length > 0) {
+            try {
+              for (const file of formData.newFiles) {
+                const path = `products/${Date.now()}_${file.name}`;
+                const ref = storage.ref().child(path);
+                const snap = await withTimeout(ref.put(file));
+                const url = await snap.ref.getDownloadURL();
+                uploaded.push({ path, url });
+              }
+            } catch (fbErr) {
+              console.error('Firebase storage failed:', fbErr);
+              // If both failed, we'll fall back to local storage later
+            }
+          }
 
-            const finalImages = [...existingRemote, ...uploaded];
+          // --- STEP 2: SAVE DATA TO DATABASE ---
+          if (db && (uploaded.length > 0 || formData.newFiles.length === 0)) {
+            try {
+              let docRef;
+              if (editingProduct && editingProduct.id) docRef = db.collection('products').doc(String(editingProduct.id));
+              else docRef = db.collection('products').doc();
 
-            const payload = {
-              name: formData.name,
-              category: formData.category,
-              brand: formData.brand,
-              price: Number(formData.price),
-              oldPrice: Number(formData.oldPrice),
-              description: formData.description,
-              images: finalImages,
-              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            };
-            if (!editingProduct) payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+              const existingRemote = (formData.images || []).filter(i => {
+                if (typeof i === 'string') return i.startsWith('http');
+                return i && i.url;
+              }).map(i => (typeof i === 'string' ? { path: null, url: i } : { path: i.path || null, url: i.url }));
 
-            await docRef.set(payload, { merge: true });
+              const finalImages = [...existingRemote, ...uploaded];
+
+              const payload = {
+                name: formData.name,
+                category: formData.category,
+                brand: formData.brand,
+                price: Number(formData.price),
+                oldPrice: Number(formData.oldPrice),
+                description: formData.description,
+                images: finalImages,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+              };
+              if (!editingProduct) payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+
+              await withTimeout(docRef.set(payload, { merge: true }));
+              alert('Product saved successfully to Cloud! (Database: Firebase)');
+            } catch (dbErr) {
+              console.error('Firestore save failed:', dbErr);
+              firebaseFailed = true;
+            }
           } else {
-            // LocalStorage fallback - CAUTION: Quota limits
-            const existing = (formData.images || []).filter(i => typeof i === 'string'); // Keep existing strings (URLs/Base64)
-            // Note: formData.images already contains base64 for newFiles from handleImageUpload
-            // We just need to make sure we don't duplicate or lose them.
-            
-            // If the user uploaded a file, it is already in formData.images as a base64 string.
-            // But we should verify if we need to do anything else.
-            // The handleImageUpload puts reader.result (base64) into images.
-            // So formData.images has everything we need for local storage.
-            
-            // Check size estimate
-            const payloadStr = JSON.stringify(formData.images);
-            if (payloadStr.length > 4000000) { // ~4MB warning
-               alert("Warning: Images are very large. Local storage might be full. Use URL images if possible.");
-            }
+            // No DB or image upload failed
+            firebaseFailed = true;
+          }
 
+          if (firebaseFailed) {
+            // LocalStorage fallback (including base64 images for immediate preview)
             const newProd = {
               ...formData,
               id: editingProduct ? editingProduct.id : Date.now(),
               price: Number(formData.price),
               oldPrice: Number(formData.oldPrice),
-              newFiles: [] // clear file objects, keep base64 images
+              newFiles: [] 
             };
 
             setProducts(prev => {
               if (editingProduct) return prev.map(p => p.id === newProd.id ? newProd : p);
               return [newProd, ...prev];
             });
-            alert('Saved locally (Note: Without Firebase, images are stored in browser cache and may disappear if cache is cleared).');
+            alert('Cloud save failed or not configured. Saved locally to this browser.');
           }
 
           setShowUploadModal(false);
@@ -462,7 +509,7 @@
           setFormData({ name:'', category:'Phones', brand:'', price:'', oldPrice:'', images:[], newFiles:[], description:'' });
         } catch (err) {
           console.error(err);
-          alert('Error saving product: ' + err.message);
+          alert('Error: ' + err.message);
         } finally {
           setIsSaving(false);
         }
@@ -533,7 +580,12 @@
                 <div>
                   <div className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-amber-600 to-amber-400 dark:from-amber-300 dark:to-amber-100 tracking-tight">AFRINETHUB</div>
                   <div className="flex items-center gap-2">
-                    {isAdminActive && <div className="text-[10px] font-bold border border-red-500 text-red-500 px-1">ADMIN ACTIVE</div>}
+                    {isAdminActive && (
+                      <div className="flex items-center gap-2">
+                        <div className="text-[10px] font-bold border border-red-500 text-red-500 px-1">ADMIN ACTIVE</div>
+                        <div className={`w-2 h-2 rounded-full ${db ? 'bg-green-500' : 'bg-slate-400'}`} title={db ? 'Firebase Connected' : 'Local Storage Mode'}></div>
+                      </div>
+                    )}
                     {isAdminActive && (
                       <button onClick={handleSignOut} className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white underline">Sign out</button>
                     )}
