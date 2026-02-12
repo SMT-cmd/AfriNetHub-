@@ -406,37 +406,51 @@
         if (!isAdminActive) { alert('Only active admin sessions can save products.'); return; }
 
         setIsSaving(true);
-        let firebaseFailed = false;
+        let cloudStep = 'Initializing';
 
         try {
           const uploaded = [];
           
           // --- STEP 1: UPLOAD IMAGES ---
-          // Try Cloudinary first if configured (it's more reliable for images)
-          if (cloudinaryConfig.cloudName && cloudinaryConfig.uploadPreset && formData.newFiles.length > 0) {
-            try {
-              for (const file of formData.newFiles) {
-                const url = `https://api.cloudinary.com/v1_1/${cloudinaryConfig.cloudName}/image/upload`;
-                const fd = new FormData();
-                fd.append('upload_preset', cloudinaryConfig.uploadPreset);
-                fd.append('file', file);
+          if (formData.newFiles.length > 0) {
+            cloudStep = 'Uploading images to Cloudinary';
+            if (cloudinaryConfig.cloudName && cloudinaryConfig.uploadPreset) {
+              try {
+                for (const file of formData.newFiles) {
+                  const url = `https://api.cloudinary.com/v1_1/${cloudinaryConfig.cloudName}/image/upload`;
+                  const fd = new FormData();
+                  fd.append('upload_preset', cloudinaryConfig.uploadPreset);
+                  fd.append('file', file);
 
-                const resp = await fetch(url, { method: 'POST', body: fd });
-                const data = await resp.json();
-                if (data.secure_url) {
-                  uploaded.push({ path: data.public_id, url: data.secure_url });
+                  const resp = await fetch(url, { method: 'POST', body: fd });
+                  const data = await resp.json();
+                  if (data.secure_url) {
+                    uploaded.push({ path: data.public_id, url: data.secure_url });
+                  } else {
+                    let detail = data.error?.message || 'Cloudinary rejected the upload.';
+                    if (detail.includes('preset')) detail = "Cloudinary Error: The upload preset 'afrinet_preset' was not found. Please create it in your Cloudinary Settings.";
+                    throw new Error(detail);
+                  }
+                }
+                console.log('Cloudinary upload success:', uploaded);
+              } catch (clErr) {
+                console.warn('Cloudinary failed, trying Firebase Storage...', clErr);
+                
+                cloudStep = 'Uploading images to Firebase Storage';
+                if (storage) {
+                  for (const file of formData.newFiles) {
+                    const path = `products/${Date.now()}_${file.name}`;
+                    const ref = storage.ref().child(path);
+                    const snap = await withTimeout(ref.put(file));
+                    const url = await snap.ref.getDownloadURL();
+                    uploaded.push({ path, url });
+                  }
                 } else {
-                  throw new Error(data.error?.message || 'Cloudinary upload failed');
+                  throw new Error('Image upload failed: Cloudinary failed and Firebase Storage is not configured.');
                 }
               }
-            } catch (clErr) {
-              console.warn('Cloudinary upload failed, trying Firebase...', clErr);
-            }
-          }
-
-          // If Cloudinary didn't run or failed, try Firebase Storage
-          if (uploaded.length === 0 && storage && formData.newFiles.length > 0) {
-            try {
+            } else if (storage) {
+              cloudStep = 'Uploading images to Firebase Storage';
               for (const file of formData.newFiles) {
                 const path = `products/${Date.now()}_${file.name}`;
                 const ref = storage.ref().child(path);
@@ -444,72 +458,64 @@
                 const url = await snap.ref.getDownloadURL();
                 uploaded.push({ path, url });
               }
-            } catch (fbErr) {
-              console.error('Firebase storage failed:', fbErr);
-              // If both failed, we'll fall back to local storage later
+            } else {
+              throw new Error('No cloud storage (Cloudinary or Firebase) is configured for images.');
             }
           }
 
           // --- STEP 2: SAVE DATA TO DATABASE ---
-          if (db && (uploaded.length > 0 || formData.newFiles.length === 0)) {
-            try {
-              let docRef;
-              if (editingProduct && editingProduct.id) docRef = db.collection('products').doc(String(editingProduct.id));
-              else docRef = db.collection('products').doc();
+          cloudStep = 'Saving product details to Firestore';
+          if (db) {
+            let docRef;
+            if (editingProduct && editingProduct.id) docRef = db.collection('products').doc(String(editingProduct.id));
+            else docRef = db.collection('products').doc();
 
-              const existingRemote = (formData.images || []).filter(i => {
-                if (typeof i === 'string') return i.startsWith('http');
-                return i && i.url;
-              }).map(i => (typeof i === 'string' ? { path: null, url: i } : { path: i.path || null, url: i.url }));
+            const existingRemote = (formData.images || []).filter(i => {
+              if (typeof i === 'string') return i.startsWith('http');
+              return i && i.url;
+            }).map(i => (typeof i === 'string' ? { path: null, url: i } : { path: i.path || null, url: i.url }));
 
-              const finalImages = [...existingRemote, ...uploaded];
+            const finalImages = [...existingRemote, ...uploaded];
 
-              const payload = {
-                name: formData.name,
-                category: formData.category,
-                brand: formData.brand,
-                price: Number(formData.price),
-                oldPrice: Number(formData.oldPrice),
-                description: formData.description,
-                images: finalImages,
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-              };
-              if (!editingProduct) payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-
-              await withTimeout(docRef.set(payload, { merge: true }));
-              alert('Product saved successfully to Cloud! (Database: Firebase)');
-            } catch (dbErr) {
-              console.error('Firestore save failed:', dbErr);
-              firebaseFailed = true;
-            }
-          } else {
-            // No DB or image upload failed
-            firebaseFailed = true;
-          }
-
-          if (firebaseFailed) {
-            // LocalStorage fallback (including base64 images for immediate preview)
-            const newProd = {
-              ...formData,
-              id: editingProduct ? editingProduct.id : Date.now(),
+            const payload = {
+              name: formData.name,
+              category: formData.category,
+              brand: formData.brand,
               price: Number(formData.price),
               oldPrice: Number(formData.oldPrice),
-              newFiles: [] 
+              description: formData.description,
+              images: finalImages,
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             };
+            if (!editingProduct) payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
 
-            setProducts(prev => {
-              if (editingProduct) return prev.map(p => p.id === newProd.id ? newProd : p);
-              return [newProd, ...prev];
-            });
-            alert('Cloud save failed or not configured. Saved locally to this browser.');
+            await withTimeout(docRef.set(payload, { merge: true }));
+            alert('🚀 Success! Product saved to the Cloud.');
+          } else {
+            throw new Error('Firestore Database (db) is not initialized.');
           }
 
           setShowUploadModal(false);
           setEditingProduct(null);
           setFormData({ name:'', category:'Phones', brand:'', price:'', oldPrice:'', images:[], newFiles:[], description:'' });
         } catch (err) {
-          console.error(err);
-          alert('Error: ' + err.message);
+          console.error(`Error during ${cloudStep}:`, err);
+          
+          // LocalStorage fallback
+          const newProd = {
+            ...formData,
+            id: editingProduct ? editingProduct.id : Date.now(),
+            price: Number(formData.price),
+            oldPrice: Number(formData.oldPrice),
+            newFiles: [] 
+          };
+
+          setProducts(prev => {
+            if (editingProduct) return prev.map(p => p.id === newProd.id ? newProd : p);
+            return [newProd, ...prev];
+          });
+
+          alert(`⚠️ Cloud Save Failed during: ${cloudStep}\n\nReason: ${err.message}\n\nYour work was saved LOCALLY to this browser instead.`);
         } finally {
           setIsSaving(false);
         }
@@ -583,7 +589,10 @@
                     {isAdminActive && (
                       <div className="flex items-center gap-2">
                         <div className="text-[10px] font-bold border border-red-500 text-red-500 px-1">ADMIN ACTIVE</div>
-                        <div className={`w-2 h-2 rounded-full ${db ? 'bg-green-500' : 'bg-slate-400'}`} title={db ? 'Firebase Connected' : 'Local Storage Mode'}></div>
+                        <div className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700">
+                          <div className={`w-1.5 h-1.5 rounded-full ${db ? 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.5)]' : 'bg-red-500 shadow-[0_0_5px_rgba(239,68,68,0.5)]'}`} title={db ? 'Firebase Connected' : 'Firebase Offline'}></div>
+                          <div className={`w-1.5 h-1.5 rounded-full ${cloudinaryConfig.cloudName ? 'bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,0.5)]' : 'bg-amber-500 shadow-[0_0_5px_rgba(245,158,11,0.5)]'}`} title={cloudinaryConfig.cloudName ? 'Cloudinary Configured' : 'Cloudinary Missing'}></div>
+                        </div>
                       </div>
                     )}
                     {isAdminActive && (
