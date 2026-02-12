@@ -58,15 +58,15 @@
 
     // ---------- STORAGE CONFIG ----------
     // 1. Firebase (Existing)
-    const firebaseConfig = {
-      apiKey: "AIzaSyDmzzR9iOp19RbM0uY19aKzJ9T3Nm5_6-k",
-      authDomain: "afrinethub.firebaseapp.com",
-      projectId: "afrinethub",
-      storageBucket: "afrinethub.appspot.com",
-      messagingSenderId: "313556528568",
-      appId: "1:313556528568:web:f8b1cda91950bbe953734d",
-      measurementId: "G-KCZD4HLCQ1"
-    };
+    const firebaseConfig = { 
+      apiKey: "AIzaSyAGZjvIZly4amlNtoKu6f9W0rQH3GukKG0", 
+      authDomain: "afrinethub-e52e6.firebaseapp.com", 
+      projectId: "afrinethub-e52e6", 
+      storageBucket: "afrinethub-e52e6.firebasestorage.app", 
+      messagingSenderId: "45671865729", 
+      appId: "1:45671865729:web:38c5843cacd6d9f5e35c80", 
+      measurementId: "G-2QXP2VR5NX" 
+    }; 
 
     // 2. Cloudinary (Recommended Alternative for Images)
     // To use Cloudinary: 
@@ -259,6 +259,34 @@
       const [formData, setFormData] = useState({ name:'', category:'Phones', brand:'', price:'', oldPrice:'', images:[], newFiles:[], description:'' });
       const [isSaving, setIsSaving] = useState(false);
       const [saveStatus, setSaveStatus] = useState('');
+      const [dbStatus, setDbStatus] = useState('checking'); // 'checking', 'online', 'offline', 'permission-denied'
+
+      // Check Firebase Connection on load
+      useEffect(() => {
+        if (!db) {
+          setDbStatus('offline');
+          return;
+        }
+
+        const testConnection = async () => {
+          try {
+            // Try to read a small piece of data with a short timeout
+            const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000));
+            const read = db.collection('products').limit(1).get();
+            await Promise.race([read, timeout]);
+            setDbStatus('online');
+          } catch (err) {
+            console.error('DB Status Check Error:', err);
+            if (err.message.includes('permission')) {
+              setDbStatus('permission-denied');
+            } else {
+              setDbStatus('offline');
+            }
+          }
+        };
+
+        testConnection();
+      }, []);
       const [imageUrlInput, setImageUrlInput] = useState('');
       const [theme, setTheme] = useLocalStorageState('afri_theme', 'dark');
 
@@ -532,10 +560,10 @@
           setSaveStatus('Done!');
           alert('🚀 Success! Product is now LIVE for all visitors.');
           
-          setIsAdminActive(false); 
-          setShowUploadModal(false);
           setEditingProduct(null);
           setFormData({ name:'', category:'Phones', brand:'', price:'', oldPrice:'', images:[], newFiles:[], description:'' });
+          // CRITICAL: Refresh admin view scroll to top if needed
+          window.scrollTo({top:0, behavior:'smooth'});
         } catch (err) {
           console.error(`Save Error:`, err);
           alert(`❌ Save Failed\n\nReason: ${err.message}`);
@@ -614,9 +642,18 @@
                       <div className="flex items-center gap-2">
                         <div className="text-[10px] font-bold border border-red-500 text-red-500 px-1">ADMIN ACTIVE</div>
                         <div className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700">
-                          <div className={`w-1.5 h-1.5 rounded-full ${db ? 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.5)]' : 'bg-red-500 shadow-[0_0_5px_rgba(239,68,68,0.5)]'}`} title={db ? 'Database Live' : 'Database Offline'}></div>
+                          <div 
+                            className={`w-2 h-2 rounded-full animate-pulse ${
+                              dbStatus === 'online' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-none' : 
+                              dbStatus === 'permission-denied' ? 'bg-amber-500' : 
+                              'bg-red-500'
+                            }`} 
+                            title={`Database: ${dbStatus}`}
+                          ></div>
                           <div className={`w-1.5 h-1.5 rounded-full ${cloudinaryConfig.cloudName ? 'bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,0.5)]' : 'bg-amber-500 shadow-[0_0_5px_rgba(245,158,11,0.5)]'}`} title={cloudinaryConfig.cloudName ? 'Cloudinary Ready' : 'Cloudinary Missing'}></div>
-                          <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tighter">Sync Active</span>
+                          <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tighter">
+                            {dbStatus === 'online' ? 'Sync Active' : dbStatus === 'permission-denied' ? 'Rules Blocked' : 'DB Offline'}
+                          </span>
                         </div>
                       </div>
                     )}
