@@ -445,7 +445,6 @@
           const finalImages = [...existingRemote, ...uploaded];
 
           const newProd = {
-            id: editingProduct ? editingProduct.id : Date.now(),
             name: formData.name,
             category: formData.category,
             brand: formData.brand,
@@ -456,21 +455,37 @@
             updatedAt: new Date().toISOString()
           };
 
-          setProducts(prev => {
-            const updated = editingProduct 
-              ? prev.map(p => p.id === newProd.id ? newProd : p)
-              : [newProd, ...prev];
-            
-            // Explicitly save to localStorage
-            try {
-              localStorage.setItem('afri_products_v3', JSON.stringify(updated));
-            } catch (e) {
-              console.error('LocalStorage save failed:', e);
-            }
-            return updated;
-          });
+          // --- STEP 2: SAVE DATA TO CLOUD (FIRESTORE) ---
+          currentStep = 'Saving to global database';
+          
+          if (db) {
+            const docId = editingProduct ? String(editingProduct.id) : String(Date.now());
+            await db.collection('products').doc(docId).set({
+              ...newProd,
+              id: docId,
+              createdAt: editingProduct ? (editingProduct.createdAt || new Date().toISOString()) : new Date().toISOString()
+            });
+            console.log('Saved to Firestore successfully');
+          } else {
+            // Fallback to local if Firebase fails to init
+            setProducts(prev => {
+              const updatedProd = { ...newProd, id: editingProduct ? editingProduct.id : Date.now() };
+              const updated = editingProduct 
+                ? prev.map(p => p.id === updatedProd.id ? updatedProd : p)
+                : [updatedProd, ...prev];
+              
+              try {
+                localStorage.setItem('afri_products_v3', JSON.stringify(updated));
+              } catch (e) { console.error('LocalStorage save failed:', e); }
+              return updated;
+            });
+          }
 
-          alert('🚀 Success! Product saved with Cloudinary images.');
+          alert('🚀 Success! Product is now LIVE for all visitors.');
+          
+          // CRITICAL: Exit admin view or refresh state to show on main site
+          setIsAdminActive(false); 
+          
           setShowUploadModal(false);
           setEditingProduct(null);
           setFormData({ name:'', category:'Phones', brand:'', price:'', oldPrice:'', images:[], newFiles:[], description:'' });
@@ -551,8 +566,9 @@
                       <div className="flex items-center gap-2">
                         <div className="text-[10px] font-bold border border-red-500 text-red-500 px-1">ADMIN ACTIVE</div>
                         <div className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700">
-                          <div className={`w-1.5 h-1.5 rounded-full ${cloudinaryConfig.cloudName ? 'bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,0.5)]' : 'bg-amber-500 shadow-[0_0_5px_rgba(245,158,11,0.5)]'}`} title={cloudinaryConfig.cloudName ? 'Cloudinary Connected' : 'Cloudinary Missing'}></div>
-                          <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tighter">Images Cloud</span>
+                          <div className={`w-1.5 h-1.5 rounded-full ${db ? 'bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.5)]' : 'bg-red-500 shadow-[0_0_5px_rgba(239,68,68,0.5)]'}`} title={db ? 'Database Live' : 'Database Offline'}></div>
+                          <div className={`w-1.5 h-1.5 rounded-full ${cloudinaryConfig.cloudName ? 'bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,0.5)]' : 'bg-amber-500 shadow-[0_0_5px_rgba(245,158,11,0.5)]'}`} title={cloudinaryConfig.cloudName ? 'Cloudinary Ready' : 'Cloudinary Missing'}></div>
+                          <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tighter">Sync Active</span>
                         </div>
                       </div>
                     )}
